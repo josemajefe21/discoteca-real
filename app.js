@@ -33,7 +33,7 @@ const DEFAULT_FIREBASE_CFG = {
   apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
   authDomain: "discoteca-real.firebaseapp.com",
   projectId: "discoteca-real",
-  storageBucket: "discoteca-real.firebasestorage.app",
+  storageBucket: "discoteca-real.appspot.com",
   appId: "1:468605215361:web:a00c2d8f0733f41ac92380",
   measurementId: "G-6JN5RNF4ME"
 };
@@ -542,6 +542,7 @@ if (byId('aj-enter')) byId('aj-enter').addEventListener('click', ()=>{
     byId('aj-auth').style.display = 'none';
     byId('aj-content').style.display = '';
     renderSettings();
+    toggleFirebaseBlock();
   } else {
     alert('Contraseña incorrecta');
   }
@@ -716,6 +717,14 @@ function populateFirebaseForm() {
 }
 populateFirebaseForm();
 ensureFirebase();
+
+// Ocultar bloque Firebase por defecto; mostrar solo si session.isAdmin
+function toggleFirebaseBlock() {
+  const show = !!session.isAdmin;
+  if (byId('fb-block')) byId('fb-block').style.display = show ? '' : 'none';
+  if (byId('fb-block-title')) byId('fb-block-title').style.display = show ? '' : 'none';
+}
+toggleFirebaseBlock();
 
 // Primera renderización
 renderPlatos();
