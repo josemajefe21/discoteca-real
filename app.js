@@ -29,6 +29,14 @@ const DEFAULT_SETTINGS = {
   votosRequeridos: 9,
 };
 const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
+const DEFAULT_FIREBASE_CFG = {
+  apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
+  authDomain: "discoteca-real.firebaseapp.com",
+  projectId: "discoteca-real",
+  storageBucket: "discoteca-real.firebasestorage.app",
+  appId: "1:468605215361:web:a00c2d8f0733f41ac92380",
+  measurementId: "G-6JN5RNF4ME"
+};
 
 let state = loadState();
 let session = { userId: null };
@@ -643,9 +651,13 @@ if (state.platos.length === 0) {
 function loadFirebaseCfg() {
   try {
     const raw = localStorage.getItem(FIREBASE_CFG_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      // si no hay config guardada, usar la por defecto provista
+      localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(DEFAULT_FIREBASE_CFG));
+      return DEFAULT_FIREBASE_CFG;
+    }
     const cfg = JSON.parse(raw);
-    return cfg && cfg.apiKey && cfg.storageBucket ? cfg : null;
+    return cfg && cfg.apiKey && cfg.storageBucket ? cfg : DEFAULT_FIREBASE_CFG;
   } catch { return null; }
 }
 
