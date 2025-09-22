@@ -8,6 +8,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-storage-compat.js"></script>
 </head>
 <body>
     <header class="topbar">
@@ -189,6 +192,31 @@
                     </table>
                 </div>
 
+                <h3>Firebase Storage</h3>
+                <div class="card form">
+                    <div class="grid-3">
+                        <label>apiKey
+                            <input type="text" id="fb-apiKey" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>authDomain
+                            <input type="text" id="fb-authDomain" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>projectId
+                            <input type="text" id="fb-projectId" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>storageBucket
+                            <input type="text" id="fb-storageBucket" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>appId
+                            <input type="text" id="fb-appId" autocomplete="off" spellcheck="false">
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button id="fb-guardar" class="primary">Guardar Firebase</button>
+                    </div>
+                    <p id="fb-status" class="muted"></p>
+                </div>
+
                 <h3>Editor de Platos</h3>
                 <form id="aj-form-plato" class="card form">
                     <div class="grid-3">
@@ -207,6 +235,7 @@
                         <label>Foto (arrastrar/soltar)
                             <div id="aj-plato-drop" class="dropzone">Arrastrá una imagen o hacé click</div>
                             <input type="file" id="aj-plato-file" accept="image/*" style="display:none">
+                            <div class="progress" id="aj-plato-progress" style="display:none"><div class="bar" id="aj-plato-progress-bar"></div></div>
                             <img id="aj-plato-preview" alt="Preview" />
                         </label>
                     </div>

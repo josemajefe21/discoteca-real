@@ -28,9 +28,11 @@ const DEFAULT_SETTINGS = {
   tamGrupo: 9,
   votosRequeridos: 9,
 };
+const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
 
 let state = loadState();
 let session = { userId: null };
+let fb = { app: null, storage: null };
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -544,16 +546,33 @@ function initPhotoDropzone() {
   const dz = byId('aj-plato-drop');
   const file = byId('aj-plato-file');
   const preview = byId('aj-plato-preview');
+  const progress = byId('aj-plato-progress');
+  const bar = byId('aj-plato-progress-bar');
   if (!dz || !file || !preview) return;
-  const setImage = (f) => {
+  const setImage = async (f) => {
     if (!f || !f.type?.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result;
-      byId('aj-plato-foto').value = dataUrl;
-      preview.src = dataUrl; preview.style.display = 'block';
-    };
-    reader.readAsDataURL(f);
+    // Si hay Firebase configurado, subir a Storage, sino usar dataURL
+    const cfg = loadFirebaseCfg();
+    if (cfg) {
+      try {
+        progress.style.display = '';
+        bar.style.width = '0%';
+        const url = await uploadToFirebase(f, (pct)=>{ bar.style.width = pct+'%'; });
+        byId('aj-plato-foto').value = url;
+        preview.src = url; preview.style.display = 'block';
+        progress.style.display = 'none';
+      } catch (e) {
+        progress.style.display = 'none';
+        // fallback dataURL
+        const reader = new FileReader();
+        reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
+        reader.readAsDataURL(f);
+      }
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
+      reader.readAsDataURL(f);
+    }
   };
   dz.addEventListener('click', ()=> file.click());
   dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
@@ -619,6 +638,72 @@ if (state.platos.length === 0) {
   }));
   saveState(state);
 }
+
+// --- Firebase helpers ---
+function loadFirebaseCfg() {
+  try {
+    const raw = localStorage.getItem(FIREBASE_CFG_KEY);
+    if (!raw) return null;
+    const cfg = JSON.parse(raw);
+    return cfg && cfg.apiKey && cfg.storageBucket ? cfg : null;
+  } catch { return null; }
+}
+
+function ensureFirebase() {
+  if (fb.app) return fb;
+  const cfg = loadFirebaseCfg();
+  if (!cfg || !window.firebase) return null;
+  try {
+    fb.app = firebase.apps?.length ? firebase.app() : firebase.initializeApp(cfg);
+    fb.storage = firebase.storage();
+    firebase.auth().signInAnonymously().catch(()=>{});
+    return fb;
+  } catch { return null; }
+}
+
+async function uploadToFirebase(file, onProgress) {
+  const fbi = ensureFirebase();
+  if (!fbi) throw new Error('Firebase no configurado');
+  const ext = (file.name.split('.').pop()||'jpg').toLowerCase();
+  const path = `platos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const ref = fbi.storage.ref().child(path);
+  return await new Promise((resolve, reject)=>{
+    const task = ref.put(file, { contentType: file.type });
+    task.on('state_changed', (snap)=>{
+      const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+      if (onProgress) onProgress(pct);
+    }, reject, async ()=>{
+      const url = await ref.getDownloadURL();
+      resolve(url);
+    });
+  });
+}
+
+// Guardar/mostrar config Firebase en Ajustes
+if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
+  const cfg = {
+    apiKey: byId('fb-apiKey').value.trim(),
+    authDomain: byId('fb-authDomain').value.trim(),
+    projectId: byId('fb-projectId').value.trim(),
+    storageBucket: byId('fb-storageBucket').value.trim(),
+    appId: byId('fb-appId').value.trim(),
+  };
+  localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
+  byId('fb-status').textContent = 'Firebase guardado localmente';
+  ensureFirebase();
+});
+
+function populateFirebaseForm() {
+  const cfg = loadFirebaseCfg();
+  if (!cfg) return;
+  if (byId('fb-apiKey')) byId('fb-apiKey').value = cfg.apiKey||'';
+  if (byId('fb-authDomain')) byId('fb-authDomain').value = cfg.authDomain||'';
+  if (byId('fb-projectId')) byId('fb-projectId').value = cfg.projectId||'';
+  if (byId('fb-storageBucket')) byId('fb-storageBucket').value = cfg.storageBucket||'';
+  if (byId('fb-appId')) byId('fb-appId').value = cfg.appId||'';
+}
+populateFirebaseForm();
+ensureFirebase();
 
 // Primera renderización
 renderPlatos();
