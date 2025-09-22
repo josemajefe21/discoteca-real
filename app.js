@@ -42,7 +42,7 @@ function loadState() {
     settings: { ...DEFAULT_SETTINGS },
     voters: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, activo: true, password: FUN_PASSWORDS[v.id] || funPassword(v.nombre) })),
     chefs: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
-    platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta}
+    platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
   };
   saveState(initial);
@@ -144,7 +144,7 @@ function renderPlatos() {
   const v = Number(byId('filtro-vuelta').value || 1);
   const rows = state.platos
     .filter(p => p.vuelta === v || !byId('filtro-vuelta').value)
-    .sort((a,b)=> (a.vuelta - b.vuelta) || a.nombre.localeCompare(b.nombre))
+    .sort((a,b)=> (a.orden||0) - (b.orden||0))
     .map(p => {
       const chef = state.chefs.find(c => c.id===p.chefId);
       return `<tr>
@@ -390,7 +390,7 @@ function renderSettings() {
   const tbPl = byId('aj-tabla-platos')?.querySelector('tbody');
   if (tbPl) {
     const list = state.platos.filter(p => (!vChe || p.chefId===vChe) && (!vVua || p.vuelta===vVua))
-      .sort((a,b)=> (a.vuelta - b.vuelta) || a.nombre.localeCompare(b.nombre));
+      .sort((a,b)=> (a.orden||0) - (b.orden||0));
     tbPl.innerHTML = list.map(p=>{
       const chef = state.chefs.find(c=>c.id===p.chefId);
       return `<tr>
@@ -495,7 +495,16 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', (e)=
     vuelta: Number(byId('aj-plato-vuelta').value||1),
   };
   const idx = state.platos.findIndex(p=>p.id===id);
-  if (idx>=0) state.platos[idx]=data; else state.platos.push(data);
+  if (idx>=0) {
+    // conservar orden existente
+    data.orden = state.platos[idx].orden || data.orden;
+    state.platos[idx]=data;
+  } else {
+    // asignar siguiente orden dentro de la vuelta
+    const maxOrden = Math.max(0, ...state.platos.filter(p=>p.vuelta===data.vuelta).map(p=>p.orden||0));
+    data.orden = maxOrden + 1;
+    state.platos.push(data);
+  }
   saveState(state);
   (e.target).reset(); byId('aj-plato-id').value='';
   if (byId('aj-plato-preview')) { byId('aj-plato-preview').src=''; byId('aj-plato-preview').style.display='none'; }
@@ -606,7 +615,7 @@ if (state.platos.length === 0) {
     'Matambrito de novillo joven con crema de verdeo silvestre acompañado de papas doradas al horno'
   ];
   state.platos = seed.map((nombre, i)=>({
-    id: uid(), nombre, descripcion: '', chefId: state.chefs[i%state.chefs.length].id, fotoUrl: '', vuelta: Math.floor(i/10)+1
+    id: uid(), nombre, descripcion: '', chefId: state.chefs[i%state.chefs.length].id, fotoUrl: '', vuelta: Math.floor(i/10)+1, orden: i+1
   }));
   saveState(state);
 }
