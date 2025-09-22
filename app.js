@@ -42,7 +42,7 @@ function loadState() {
     settings: { ...DEFAULT_SETTINGS },
     voters: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, activo: true, password: FUN_PASSWORDS[v.id] || funPassword(v.nombre) })),
     chefs: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
-    platos: [], // {id, nombre, descripcion, chefId, fecha, fotoUrl, vuelta}
+    platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
   };
   saveState(initial);
@@ -144,18 +144,17 @@ function renderPlatos() {
   const v = Number(byId('filtro-vuelta').value || 1);
   const rows = state.platos
     .filter(p => p.vuelta === v || !byId('filtro-vuelta').value)
-    .sort((a,b)=> new Date(a.fecha) - new Date(b.fecha))
+    .sort((a,b)=> (a.vuelta - b.vuelta) || a.nombre.localeCompare(b.nombre))
     .map(p => {
       const chef = state.chefs.find(c => c.id===p.chefId);
       return `<tr>
         <td>${p.fotoUrl?`<img class="thumb" src="${p.fotoUrl}" alt="${p.nombre}">`:''}</td>
         <td>${p.nombre}<div class="muted">${p.descripcion||''}</div></td>
         <td>${chef?chef.nombre:''}</td>
-        <td>${p.fecha||''}</td>
         <td><span class="badge">${p.vuelta}</span></td>
       </tr>`;
     }).join('');
-  tb.innerHTML = rows || '<tr><td colspan="5" class="muted">Sin platos aún</td></tr>';
+  tb.innerHTML = rows || '<tr><td colspan="4" class="muted">Sin platos aún</td></tr>';
 }
 
 // Filtro en vista pública de platos
@@ -391,21 +390,20 @@ function renderSettings() {
   const tbPl = byId('aj-tabla-platos')?.querySelector('tbody');
   if (tbPl) {
     const list = state.platos.filter(p => (!vChe || p.chefId===vChe) && (!vVua || p.vuelta===vVua))
-      .sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
+      .sort((a,b)=> (a.vuelta - b.vuelta) || a.nombre.localeCompare(b.nombre));
     tbPl.innerHTML = list.map(p=>{
       const chef = state.chefs.find(c=>c.id===p.chefId);
       return `<tr>
         <td>${p.fotoUrl?`<img class="thumb" src="${p.fotoUrl}">`:''}</td>
         <td>${p.nombre}</td>
         <td>${chef?chef.nombre:''}</td>
-        <td>${p.fecha||''}</td>
         <td><span class="badge">${p.vuelta}</span></td>
         <td class="right">
           <button class="ghost" data-aj-edit="${p.id}">Editar</button>
           <button class="ghost" data-aj-del="${p.id}" style="color:#ef476f">Borrar</button>
         </td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6" class="muted">Sin platos</td></tr>';
+    }).join('') || '<tr><td colspan="5" class="muted">Sin platos</td></tr>';
 
     tbPl.querySelectorAll('button[data-aj-edit]').forEach(btn=>btn.addEventListener('click', ()=>{
       const p = state.platos.find(x=>x.id===btn.dataset.ajEdit);
@@ -413,10 +411,13 @@ function renderSettings() {
       byId('aj-plato-id').value = p.id;
       byId('aj-plato-nombre').value = p.nombre;
       byId('aj-plato-chef').value = p.chefId;
-      byId('aj-plato-fecha').value = p.fecha;
       byId('aj-plato-vuelta').value = p.vuelta;
       byId('aj-plato-descripcion').value = p.descripcion||'';
       byId('aj-plato-foto').value = p.fotoUrl||'';
+      if (byId('aj-plato-preview')) {
+        if (p.fotoUrl) { byId('aj-plato-preview').src = p.fotoUrl; byId('aj-plato-preview').style.display = 'block'; }
+        else { byId('aj-plato-preview').src = ''; byId('aj-plato-preview').style.display = 'none'; }
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
     tbPl.querySelectorAll('button[data-aj-del]').forEach(btn=>btn.addEventListener('click', ()=>{
@@ -490,7 +491,6 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', (e)=
     nombre: byId('aj-plato-nombre').value.trim(),
     descripcion: byId('aj-plato-descripcion').value.trim(),
     chefId: byId('aj-plato-chef').value,
-    fecha: byId('aj-plato-fecha').value,
     fotoUrl: byId('aj-plato-foto').value.trim(),
     vuelta: Number(byId('aj-plato-vuelta').value||1),
   };
@@ -498,6 +498,7 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', (e)=
   if (idx>=0) state.platos[idx]=data; else state.platos.push(data);
   saveState(state);
   (e.target).reset(); byId('aj-plato-id').value='';
+  if (byId('aj-plato-preview')) { byId('aj-plato-preview').src=''; byId('aj-plato-preview').style.display='none'; }
   renderPlatos(); renderSettings(); refreshVoteForm(); initSelectors();
 });
 if (byId('aj-plato-reset')) byId('aj-plato-reset').addEventListener('click', ()=>{ byId('aj-plato-id').value=''; });
@@ -526,6 +527,38 @@ if (byId('aj-enter')) byId('aj-enter').addEventListener('click', ()=>{
     alert('Contraseña incorrecta');
   }
 });
+
+// Dropzone para fotos de platos en Ajustes
+let dropInited = false;
+function initPhotoDropzone() {
+  if (dropInited) return;
+  const dz = byId('aj-plato-drop');
+  const file = byId('aj-plato-file');
+  const preview = byId('aj-plato-preview');
+  if (!dz || !file || !preview) return;
+  const setImage = (f) => {
+    if (!f || !f.type?.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      byId('aj-plato-foto').value = dataUrl;
+      preview.src = dataUrl; preview.style.display = 'block';
+    };
+    reader.readAsDataURL(f);
+  };
+  dz.addEventListener('click', ()=> file.click());
+  dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+  dz.addEventListener('drop', (e)=>{ e.preventDefault(); dz.classList.remove('dragover'); const f = e.dataTransfer.files[0]; setImage(f); });
+  file.addEventListener('change', ()=> setImage(file.files[0]));
+  dropInited = true;
+}
+
+// Inicializar dropzone cuando se muestre Ajustes
+if (views.ajustes) {
+  const obs = new MutationObserver(()=>{ if (views.ajustes.classList.contains('visible')) { initPhotoDropzone(); } });
+  obs.observe(views.ajustes, { attributes: true, attributeFilter: ['class'] });
+}
 
 // Exportar / Importar
 byId('btn-export').addEventListener('click', ()=>{
@@ -572,9 +605,8 @@ if (state.platos.length === 0) {
     'Picana rellena con hebras de mozzarella bufalina, jamón ibérico de bellota y portobellos salteados en manteca de salvia, acompañada de papas nativas crocantes',
     'Matambrito de novillo joven con crema de verdeo silvestre acompañado de papas doradas al horno'
   ];
-  const hoy = new Date().toISOString().slice(0,10);
   state.platos = seed.map((nombre, i)=>({
-    id: uid(), nombre, descripcion: '', chefId: state.chefs[i%state.chefs.length].id, fecha: hoy, fotoUrl: '', vuelta: Math.floor(i/10)+1
+    id: uid(), nombre, descripcion: '', chefId: state.chefs[i%state.chefs.length].id, fotoUrl: '', vuelta: Math.floor(i/10)+1
   }));
   saveState(state);
 }

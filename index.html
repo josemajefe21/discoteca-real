@@ -47,7 +47,6 @@
                             <th>Foto</th>
                             <th>Nombre</th>
                             <th>Chef</th>
-                            <th>Fecha</th>
                             <th>Vuelta</th>
                         </tr>
                     </thead>
@@ -199,14 +198,16 @@
                         <label>Chef
                             <select id="aj-plato-chef" required></select>
                         </label>
-                        <label>Fecha
-                            <input type="date" id="aj-plato-fecha" required>
-                        </label>
                         <label>Vuelta
                             <input type="number" id="aj-plato-vuelta" min="1" value="1" required>
                         </label>
                         <label>Foto (URL)
                             <input type="url" id="aj-plato-foto" placeholder="https://...">
+                        </label>
+                        <label>Foto (arrastrar/soltar)
+                            <div id="aj-plato-drop" class="dropzone">Arrastrá una imagen o hacé click</div>
+                            <input type="file" id="aj-plato-file" accept="image/*" style="display:none">
+                            <img id="aj-plato-preview" alt="Preview" />
                         </label>
                     </div>
                     <label>Descripción
@@ -234,7 +235,6 @@
                                 <th>Foto</th>
                                 <th>Nombre</th>
                                 <th>Chef</th>
-                                <th>Fecha</th>
                                 <th>Vuelta</th>
                                 <th></th>
                             </tr>

@@ -86,7 +86,6 @@ table.table img.thumb { width: 56px; height: 40px; object-fit: cover; border-rad
 /* tablas responsive: oculta columnas menos críticas */
 @media (max-width: 720px) {
   #tabla-platos th:nth-child(3), #tabla-platos td:nth-child(3),
-  #tabla-platos th:nth-child(4), #tabla-platos td:nth-child(4) { display: none; }
   #tabla-ranking th:nth-child(5), #tabla-ranking td:nth-child(5),
   #tabla-ranking th:nth-child(6), #tabla-ranking td:nth-child(6),
   #tabla-ranking th:nth-child(7), #tabla-ranking td:nth-child(7) { display: none; }
@@ -152,5 +151,16 @@ table.table img.thumb { width: 56px; height: 40px; object-fit: cover; border-rad
   .form label { font-size: 13px; }
   input, select, textarea { padding: 9px 10px; }
 }
+
+/* dropzone */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 14px; text-align: center; color: var(--muted);
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+}
+.dropzone.dragover { border-color: var(--primary); color: #fff; }
+#aj-plato-preview { display: none; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-top: 8px; }
 
 
