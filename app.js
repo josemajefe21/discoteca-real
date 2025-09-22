@@ -33,7 +33,7 @@ const DEFAULT_FIREBASE_CFG = {
   apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
   authDomain: "discoteca-real.firebaseapp.com",
   projectId: "discoteca-real",
-  storageBucket: "discoteca-real.appspot.com",
+  storageBucket: "discoteca-real.firebasestorage.app",
   appId: "1:468605215361:web:a00c2d8f0733f41ac92380",
   measurementId: "G-6JN5RNF4ME"
 };
