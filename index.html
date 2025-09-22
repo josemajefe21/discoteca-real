@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Discoteca - 50 Best Vibes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <img class="logo" src="LOGO/ChatGPT Image 22 sept 2025, 15_52_46.png" alt="Discoteca Logo">
+            <div class="titles">
+                <h1>Discoteca</h1>
+                <p class="subtitle">Cenas, votaciones y ranking estilo 50 Best</p>
+            </div>
+        </div>
+        <nav class="nav">
+            <button data-route="platos" class="nav-btn active">Platos</button>
+            <button data-route="votar" class="nav-btn">Votar 3-2-1</button>
+            <button data-route="ranking" class="nav-btn">Ranking</button>
+            <button data-route="chefs" class="nav-btn">Chefs</button>
+            <button data-route="ajustes" class="nav-btn">Ajustes</button>
+            <button data-route="backup" class="nav-btn">Exportar/Importar</button>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <canvas id="heroCanvas" width="1200" height="200" aria-hidden="true"></canvas>
+    </section>
+
+    <main id="app">
+        <section id="view-platos" class="view visible">
+            <h2>Platos</h2>
+            <div class="table-wrap card">
+                <div class="table-controls">
+                    <label>Filtrar por vuelta
+                        <select id="filtro-vuelta"></select>
+                    </label>
+                </div>
+                <table class="table" id="tabla-platos">
+                    <thead>
+                        <tr>
+                            <th>Foto</th>
+                            <th>Nombre</th>
+                            <th>Chef</th>
+                            <th>Fecha</th>
+                            <th>Vuelta</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="view-votar" class="view">
+            <h2>Votar 3-2-1</h2>
+            <div id="auth-box" class="card form">
+                <div class="grid-2">
+                    <label>Votante
+                        <select id="auth-user"></select>
+                    </label>
+                    <label>Contraseña
+                        <input type="password" id="auth-pass" placeholder="Contraseña divertida">
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button id="btn-login" class="primary">Ingresar</button>
+                    <button id="btn-logout" class="ghost" style="display:none">Salir</button>
+                </div>
+                <p id="auth-status" class="muted"></p>
+            </div>
+
+            <form id="form-voto" class="card form" style="display:none">
+                <div class="grid-3">
+                    <label>Vuelta
+                        <select id="voto-vuelta"></select>
+                    </label>
+                    <div></div>
+                    <div class="right"><button type="button" id="voto-limpiar" class="ghost">Limpiar selección</button></div>
+                </div>
+                <div id="voto-catalogo" class="catalog-grid"></div>
+                <div class="form-actions">
+                    <button type="submit" class="primary" id="voto-submit">Enviar voto</button>
+                </div>
+                <p id="voto-aviso" class="muted"></p>
+            </form>
+        </section>
+
+        <section id="view-ranking" class="view">
+            <h2>Ranking</h2>
+            <div class="card">
+                <div class="grid-3">
+                    <label>Vuelta
+                        <select id="ranking-vuelta"></select>
+                    </label>
+                    <div></div>
+                    <div class="right">
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-general">
+                            <span>Ver ranking general</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="ranking-wrap" class="blur-wrap">
+                    <table class="table" id="tabla-ranking">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Plato</th>
+                                <th>Chef</th>
+                                <th>Puntos</th>
+                                <th>3pts</th>
+                                <th>2pts</th>
+                                <th>1pt</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="blur-overlay" id="ranking-blur">
+                        <p>El ranking se revela cuando haya votos suficientes.</p>
+                    </div>
+                </div>
+                <p id="ranking-info" class="muted"></p>
+            </div>
+        </section>
+
+        <section id="view-chefs" class="view">
+            <h2>Chefs</h2>
+            <div class="card table-wrap">
+                <table class="table" id="tabla-chefs">
+                    <thead>
+                        <tr>
+                            <th>Chef</th>
+                            <th>Platos</th>
+                            <th>Puntos totales</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="view-ajustes" class="view">
+            <h2>Ajustes</h2>
+            <div class="card form" id="aj-auth">
+                <div class="grid-2">
+                    <label>Contraseña de administración
+                        <input type="password" id="aj-pass" autocomplete="new-password" autocapitalize="off" spellcheck="false" inputmode="text" name="admin-pass">
+                    </label>
+                    <label>&nbsp;
+                        <button id="aj-enter" class="primary">Entrar</button>
+                    </label>
+                </div>
+                <p class="muted">Las ediciones solo se hacen aquí.</p>
+            </div>
+
+            <div id="aj-content" style="display:none">
+                <div class="card form">
+                    <div class="grid-3">
+                        <label>Tamaño del grupo (votantes)
+                            <input type="number" id="aj-grupo" min="1" max="50">
+                        </label>
+                        <label>Votos requeridos para revelar ranking
+                            <input type="number" id="aj-requeridos" min="1" max="50">
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button id="aj-guardar" class="primary">Guardar ajustes</button>
+                    </div>
+                </div>
+
+                <div class="card table-wrap">
+                    <div class="table-controls">
+                        <button id="votante-nuevo" class="ghost">Agregar votante</button>
+                    </div>
+                    <table class="table" id="tabla-votantes">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Activo</th>
+                                <th>Contraseña</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <h3>Editor de Platos</h3>
+                <form id="aj-form-plato" class="card form">
+                    <div class="grid-3">
+                        <label>Nombre
+                            <input type="text" id="aj-plato-nombre" required>
+                        </label>
+                        <label>Chef
+                            <select id="aj-plato-chef" required></select>
+                        </label>
+                        <label>Fecha
+                            <input type="date" id="aj-plato-fecha" required>
+                        </label>
+                        <label>Vuelta
+                            <input type="number" id="aj-plato-vuelta" min="1" value="1" required>
+                        </label>
+                        <label>Foto (URL)
+                            <input type="url" id="aj-plato-foto" placeholder="https://...">
+                        </label>
+                    </div>
+                    <label>Descripción
+                        <textarea id="aj-plato-descripcion" rows="3" required></textarea>
+                    </label>
+                    <div class="form-actions">
+                        <button type="submit" class="primary">Guardar plato</button>
+                        <button type="reset" id="aj-plato-reset" class="ghost">Limpiar</button>
+                    </div>
+                    <input type="hidden" id="aj-plato-id">
+                </form>
+                <div class="table-wrap card">
+                    <div class="table-controls grid-3">
+                        <label>Filtrar por chef
+                            <select id="aj-filtro-chef"></select>
+                        </label>
+                        <label>Filtrar por vuelta
+                            <select id="aj-filtro-vuelta"></select>
+                        </label>
+                        <div></div>
+                    </div>
+                    <table class="table" id="aj-tabla-platos">
+                        <thead>
+                            <tr>
+                                <th>Foto</th>
+                                <th>Nombre</th>
+                                <th>Chef</th>
+                                <th>Fecha</th>
+                                <th>Vuelta</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <h3>Editor de Chefs</h3>
+                <form id="aj-form-chef" class="card form">
+                    <div class="grid-3">
+                        <label>Nombre
+                            <input type="text" id="aj-chef-nombre" required>
+                        </label>
+                        <label>Alias (opcional)
+                            <input type="text" id="aj-chef-alias">
+                        </label>
+                        <label>&nbsp;
+                            <button type="submit" class="primary">Agregar/Guardar</button>
+                        </label>
+                    </div>
+                    <input type="hidden" id="aj-chef-id">
+                </form>
+                <div class="card table-wrap">
+                    <table class="table" id="aj-tabla-chefs">
+                        <thead>
+                            <tr>
+                                <th>Chef</th>
+                                <th>Platos</th>
+                                <th>Puntos totales</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="view-backup" class="view">
+            <h2>Exportar / Importar</h2>
+            <div class="card form">
+                <div class="grid-2">
+                    <div>
+                        <button id="btn-export" class="primary">Exportar JSON</button>
+                    </div>
+                    <div>
+                        <input type="file" id="file-import" accept="application/json">
+                        <button id="btn-import" class="ghost">Importar JSON</button>
+                    </div>
+                </div>
+                <p class="muted">Usá esto para respaldar o mover los datos. El archivo incluye platos, chefs, votantes y votos.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <small>Hecho con hambre y cariño — Discoteca</small>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
+
