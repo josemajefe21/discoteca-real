@@ -674,14 +674,31 @@ function ensureFirebase() {
   try {
     fb.app = firebase.apps?.length ? firebase.app() : firebase.initializeApp(cfg);
     fb.storage = firebase.storage();
+    // no esperar aquí; se asegura antes de subir
     firebase.auth().signInAnonymously().catch(()=>{});
     return fb;
   } catch { return null; }
 }
 
+// Esperar a que la auth anónima esté lista antes de subir
+function waitForAnonymousAuth(timeoutMs = 7000) {
+  const inst = ensureFirebase();
+  if (!inst) return Promise.reject(new Error('Firebase no configurado'));
+  if (firebase.auth().currentUser) return Promise.resolve(firebase.auth().currentUser);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const off = firebase.auth().onAuthStateChanged((u) => {
+      if (u && !settled) { settled = true; off(); resolve(u); }
+    });
+    firebase.auth().signInAnonymously().catch(() => {});
+    setTimeout(() => { if (!settled) { try { off(); } catch {} reject(new Error('Auth anónima no disponible')); } }, timeoutMs);
+  });
+}
+
 async function uploadToFirebase(file, onProgress) {
   const fbi = ensureFirebase();
   if (!fbi) throw new Error('Firebase no configurado');
+  await waitForAnonymousAuth();
   const ext = (file.name.split('.').pop()||'jpg').toLowerCase();
   const path = `platos/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
   const ref = fbi.storage.ref().child(path);
