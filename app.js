@@ -658,6 +658,11 @@ function loadFirebaseCfg() {
       return DEFAULT_FIREBASE_CFG;
     }
     const cfg = JSON.parse(raw);
+    // Arreglar dominio de bucket si viene mal
+    if (cfg && typeof cfg.storageBucket === 'string' && cfg.storageBucket.includes('firebasestorage.app')) {
+      cfg.storageBucket = cfg.storageBucket.replace('firebasestorage.app', 'appspot.com');
+      localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
+    }
     return cfg && cfg.apiKey && cfg.storageBucket ? cfg : DEFAULT_FIREBASE_CFG;
   } catch { return null; }
 }
@@ -725,6 +730,18 @@ function toggleFirebaseBlock() {
   if (byId('fb-block-title')) byId('fb-block-title').style.display = show ? '' : 'none';
 }
 toggleFirebaseBlock();
+
+// Migración: corregir URLs antiguas de fotos con dominio incorrecto
+(function migratePhotoUrls() {
+  let changed = false;
+  for (const p of state.platos) {
+    if (p.fotoUrl && typeof p.fotoUrl === 'string' && p.fotoUrl.includes('discoteca-real.firebasestorage.app')) {
+      p.fotoUrl = p.fotoUrl.replace('discoteca-real.firebasestorage.app', 'discoteca-real.appspot.com');
+      changed = true;
+    }
+  }
+  if (changed) saveState(state);
+})();
 
 // Primera renderización
 renderPlatos();
