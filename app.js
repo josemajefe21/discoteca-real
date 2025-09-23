@@ -138,6 +138,11 @@ function initSelectors() {
   // Chefs para formularios en Ajustes
   const chefSelectAj = byId('aj-plato-chef');
   if (chefSelectAj) chefSelectAj.innerHTML = state.chefs.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  // Prellenar datalist de fotos locales si existen
+  const fotoDatalist = byId('aj-foto-datalist');
+  if (fotoDatalist && window.__localPhotos) {
+    fotoDatalist.innerHTML = window.__localPhotos.map(p => `<option value="${p}"></option>`).join('');
+  }
 
   // Filtros en Ajustes
   const filtroChefAj = byId('aj-filtro-chef');
@@ -778,5 +783,50 @@ renderChefs();
 renderSettings();
 renderRanking();
 refreshVoteForm();
+
+// Detectar fotos estáticas desplegadas en /fotos/ (si existe la carpeta)
+(async function probeLocalPhotos(){
+  const candidates = [
+    'fotos/1.jpg','fotos/1.jpeg','fotos/1.png','fotos/01.jpg','fotos/01.jpeg','fotos/01.png'
+  ];
+  const found = [];
+  await Promise.all(candidates.map(async (p)=>{
+    try { const r = await fetch(p, { method: 'HEAD' }); if (r.ok) found.push('/'+p.replace(/^\/?/,'')); } catch {}
+  }));
+  if (found.length) {
+    window.__localPhotos = found;
+    renderSettings();
+  }
+})();
+
+// Migración: subir fotos embebidas (data URL) a Firebase para que se vean en otros dispositivos
+async function migrateEmbeddedPhotos() {
+  const cfg = loadFirebaseCfg();
+  const useFb = !!cfg; // usar Firebase si hay config
+  const status = byId('aj-migrar-status');
+  if (!useFb) { if (status) status.textContent = 'Configura Firebase primero.'; return; }
+  let done = 0, total = 0;
+  for (const p of state.platos) {
+    if (p.fotoUrl && typeof p.fotoUrl === 'string' && p.fotoUrl.startsWith('data:')) total++;
+  }
+  if (!total) { if (status) status.textContent = 'No hay fotos embebidas para migrar.'; return; }
+  if (status) status.textContent = `Migrando ${total} fotos...`;
+  for (const p of state.platos) {
+    if (!(p.fotoUrl && p.fotoUrl.startsWith('data:'))) continue;
+    try {
+      const blob = await (await fetch(p.fotoUrl)).blob();
+      const ext = blob.type.split('/')[1]||'jpg';
+      const file = new File([blob], `migrada.${ext}`, { type: blob.type });
+      const url = await uploadToFirebase(file);
+      p.fotoUrl = url; done++; saveState(state);
+      if (status) status.textContent = `Migradas ${done}/${total}`;
+    } catch (e) {
+      if (status) status.textContent = `Error en una foto, continúa ${done}/${total}`;
+    }
+  }
+  if (status) status.textContent = `Listo: ${done}/${total} migradas.`;
+  renderPlatos(); renderSettings();
+}
+if (byId('aj-migrar')) byId('aj-migrar').addEventListener('click', migrateEmbeddedPhotos);
 
 

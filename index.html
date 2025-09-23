@@ -220,6 +220,14 @@
                     <p id="fb-status" class="muted"></p>
                 </div>
 
+                <h3>Migrar fotos a Firebase</h3>
+                <div class="card form">
+                    <div class="grid-2">
+                        <button id="aj-migrar" class="ghost">Migrar fotos embebidas</button>
+                        <p id="aj-migrar-status" class="muted"></p>
+                    </div>
+                </div>
+
                 <h3>Editor de Platos</h3>
                 <form id="aj-form-plato" class="card form">
                     <div class="grid-3">
@@ -233,7 +241,9 @@
                             <input type="number" id="aj-plato-vuelta" min="1" value="1" required>
                         </label>
                         <label>Foto (URL)
-                            <input type="url" id="aj-plato-foto" placeholder="https://...">
+                            <input type="url" id="aj-plato-foto" placeholder="https://... o /fotos/archivo.jpg" list="aj-foto-datalist">
+                            <datalist id="aj-foto-datalist"></datalist>
+                            <span class="muted">Tip: podés subir imágenes a la carpeta del proyecto <code>/fotos/</code> y usarlas como <code>/fotos/mi-foto.jpg</code></span>
                         </label>
                         <label>Foto (arrastrar/soltar)
                             <div id="aj-plato-drop" class="dropzone">Arrastrá una imagen o hacé click</div>
