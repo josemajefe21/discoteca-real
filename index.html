@@ -220,6 +220,25 @@
                     <p id="fb-status" class="muted"></p>
                 </div>
 
+                <h3 id="cld-block-title" style="display:none">Cloudinary</h3>
+                <div class="card form" id="cld-block" style="display:none">
+                    <div class="grid-3">
+                        <label>cloud_name
+                            <input type="text" id="cld-cloud" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>upload_preset (unsigned)
+                            <input type="text" id="cld-preset" autocomplete="off" spellcheck="false">
+                        </label>
+                        <label>folder (opcional)
+                            <input type="text" id="cld-folder" autocomplete="off" spellcheck="false" placeholder="platos">
+                        </label>
+                    </div>
+                    <div class="form-actions">
+                        <button id="cld-guardar" class="primary">Guardar Cloudinary</button>
+                    </div>
+                    <p id="cld-status" class="muted"></p>
+                </div>
+
                 <h3>Migrar fotos a Firebase</h3>
                 <div class="card form">
                     <div class="grid-2">
