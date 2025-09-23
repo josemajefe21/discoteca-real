@@ -27,6 +27,7 @@ const FUN_PASSWORDS = {
 const DEFAULT_SETTINGS = {
   tamGrupo: 9,
   votosRequeridos: 9,
+  useFirebase: false,
 };
 const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
 const DEFAULT_FIREBASE_CFG = {
@@ -45,7 +46,15 @@ let fb = { app: null, storage: null };
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
-    try { return JSON.parse(raw); } catch (e) {}
+    try {
+      const parsed = JSON.parse(raw);
+      // backfill de ajustes nuevos
+      parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings||{}) };
+      if (!parsed.platos) parsed.platos = [];
+      if (!parsed.votos) parsed.votos = [];
+      saveState(parsed);
+      return parsed;
+    } catch (e) {}
   }
   const initial = {
     version: 1,
@@ -355,6 +364,7 @@ function renderSettings() {
   // Ajustes básicos
   if (byId('aj-grupo')) byId('aj-grupo').value = state.settings.tamGrupo;
   if (byId('aj-requeridos')) byId('aj-requeridos').value = state.settings.votosRequeridos;
+  if (byId('aj-fb-flag')) byId('aj-fb-flag').checked = !!state.settings.useFirebase;
 
   // Votantes
   const tb = byId('tabla-votantes')?.querySelector('tbody');
@@ -483,6 +493,7 @@ function renderSettings() {
 if (byId('aj-guardar')) byId('aj-guardar').addEventListener('click', ()=>{
   state.settings.tamGrupo = Math.max(1, Number(byId('aj-grupo').value||DEFAULT_SETTINGS.tamGrupo));
   state.settings.votosRequeridos = Math.max(1, Number(byId('aj-requeridos').value||DEFAULT_SETTINGS.votosRequeridos));
+  state.settings.useFirebase = !!(byId('aj-fb-flag') && byId('aj-fb-flag').checked);
   saveState(state); renderRanking();
 });
 
@@ -562,7 +573,8 @@ function initPhotoDropzone() {
     if (!f || !f.type?.startsWith('image/')) return;
     // Si hay Firebase configurado, subir a Storage, sino usar dataURL
     const cfg = loadFirebaseCfg();
-    if (cfg) {
+    const useFb = !!state.settings.useFirebase && !!cfg;
+    if (useFb) {
       try {
         progress.style.display = '';
         bar.style.width = '0%';
