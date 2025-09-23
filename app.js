@@ -830,3 +830,47 @@ async function migrateEmbeddedPhotos() {
 if (byId('aj-migrar')) byId('aj-migrar').addEventListener('click', migrateEmbeddedPhotos);
 
 
+
+// Asignar foto automáticamente a platos conocidos (si falta foto)
+(function autoAssignKnownPhotos(){
+  try {
+    const mappings = [
+      { text: 'Filet especiado al Malbec', url: '/FOTOS/file.jpeg' },
+    ];
+    let changed = false;
+    for (const m of mappings) {
+      const p = state.platos.find(x => (x.nombre||'').toLowerCase().includes(m.text.toLowerCase()));
+      if (p && (!p.fotoUrl || p.fotoUrl.trim()==='')) { p.fotoUrl = m.url; changed = true; }
+    }
+    if (changed) { saveState(state); renderPlatos(); renderSettings(); }
+  } catch {}
+})();
+
+// Botón manual para asignar por nombre
+async function autoAssignByButton() {
+  const status = byId('aj-auto-assign-status');
+  if (status) status.textContent = 'Buscando archivos en /FOTOS y /fotos...';
+  let count = 0;
+  const folders = ['/FOTOS/','/fotos/'];
+  const exts = ['.jpg','.jpeg','.png'];
+  async function findUrl(base) {
+    for (const folder of folders) {
+      for (const ext of exts) {
+        const url = `${folder}${base}${ext}`;
+        try { const r = await fetch(url, { method: 'HEAD' }); if (r.ok) return url; } catch {}
+      }
+    }
+    return null;
+  }
+  for (const p of state.platos) {
+    if (p.fotoUrl && p.fotoUrl.trim()!=='') continue;
+    const base = (p.nombre||'').toLowerCase().split(/[\s\"\'\,\(\)]+/).find(w=>w.length>3);
+    if (!base) continue;
+    const url = await findUrl(base);
+    if (url) { p.fotoUrl = url; count++; }
+  }
+  if (count>0) { saveState(state); renderPlatos(); renderSettings(); }
+  if (status) status.textContent = count>0 ? `Asignadas ${count} fotos.` : 'No se encontraron archivos coincidentes.';
+}
+if (byId('aj-auto-assign')) byId('aj-auto-assign').addEventListener('click', autoAssignByButton);
+
