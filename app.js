@@ -651,6 +651,7 @@ if (byId('aj-enter')) byId('aj-enter').addEventListener('click', ()=>{
     byId('aj-content').style.display = '';
     renderSettings();
     toggleFirebaseBlock();
+    if (typeof toggleCloudinaryBlock === 'function') toggleCloudinaryBlock();
   } else {
     alert('Contraseña incorrecta');
   }
