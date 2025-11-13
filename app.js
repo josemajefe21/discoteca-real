@@ -362,8 +362,8 @@ function renderRanking() {
     </tr>
   `).join('') || '<tr><td colspan="7" class="muted">Sin votos aún</td></tr>';
 
-  // Podio manual si existe para la vuelta (solo cuando no es ranking general)
-  renderPodio(general ? null : vuelta);
+  // Podio (manual si existe; si no, top 3 calculado) solo cuando no es general
+  renderPodio(general ? null : vuelta, { list, reveal });
 }
 byId('ranking-vuelta').addEventListener('change', renderRanking);
 byId('toggle-general').addEventListener('change', renderRanking);
@@ -768,16 +768,31 @@ function stopCloudSync() {
   cloud.started = false;
 }
 
-function renderPodio(vuelta) {
+function renderPodio(vuelta, ctx) {
   const wrap = byId('ranking-wrap');
   if (!wrap) return;
   let podioEl = byId('ranking-podio');
-  if (podioEl && (!vuelta || !state.manualPodio || !state.manualPodio[vuelta])) {
+  const reveal = ctx && ctx.reveal;
+  // si no hay vuelta, o no está revelada, ocultar podio
+  if (podioEl && (!vuelta || !reveal)) {
     podioEl.remove();
     return;
   }
-  if (!vuelta || !state.manualPodio || !state.manualPodio[vuelta]) return;
-  const items = (state.manualPodio[vuelta]||[]).slice().sort((a,b)=> (b.puntos||0)-(a.puntos||0)).slice(0,3);
+  if (!vuelta || !reveal) return;
+  // fuente de datos del podio: manual si existe; si no, top 3 del ranking calculado
+  let items = [];
+  if (state.manualPodio && state.manualPodio[vuelta] && state.manualPodio[vuelta].length) {
+    items = (state.manualPodio[vuelta]||[]).slice().sort((a,b)=> (b.puntos||0)-(a.puntos||0)).slice(0,3);
+  } else if (ctx && Array.isArray(ctx.list)) {
+    items = ctx.list.slice(0,3).map(r => ({
+      platoId: r.platoId || null,
+      nombre: r.nombre,
+      puntos: r.score || 0,
+    }));
+  } else {
+    if (podioEl) podioEl.remove();
+    return;
+  }
   if (!podioEl) {
     podioEl = document.createElement('div');
     podioEl.id = 'ranking-podio';
