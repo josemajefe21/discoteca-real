@@ -375,18 +375,24 @@ byId('toggle-general').addEventListener('change', renderRanking);
 // Chefs
 function renderChefs() {
   const tb = byId('tabla-chefs').querySelector('tbody');
-  const data = state.chefs.map(c => {
+  // calcular puntaje base por chef
+  const base = state.chefs.map(c => {
     const platos = state.platos.filter(p=>p.chefId===c.id);
     const total = computeRanking({ general: true }).list
       .filter(r => platos.some(p=>p.nombre===r.nombre))
       .reduce((acc,r)=>acc+r.score,0);
     return { ...c, platosCount: platos.length, total };
-  }).sort((a,b)=> b.total - a.total || a.nombre.localeCompare(b.nombre));
-  tb.innerHTML = data.map(c=>`
+  });
+  // ordenar por puntaje base y asignar bonus a top 3: +3, +2, +1
+  const sorted = base.slice().sort((a,b)=> b.total - a.total || a.nombre.localeCompare(b.nombre));
+  const idToBonus = new Map();
+  sorted.slice(0,3).forEach((c, idx) => { idToBonus.set(c.id, idx===0?3:idx===1?2:1); });
+  const withBonus = sorted.map(c => ({ ...c, bonus: idToBonus.get(c.id)||0, totalConBonus: c.total + (idToBonus.get(c.id)||0) }));
+  tb.innerHTML = withBonus.map(c=>`
     <tr>
-      <td>${c.nombre}${c.alias?` <span class="muted">(${c.alias})</span>`:''}</td>
+      <td>${c.nombre}${c.alias?` <span class="muted">(${c.alias})</span>`:''} ${c.bonus?`<span class="badge" title="Bonus podio">+${c.bonus}</span>`:''}</td>
       <td>${c.platosCount}</td>
-      <td>${c.total}</td>
+      <td>${c.totalConBonus}</td>
     </tr>
   `).join('') || '<tr><td colspan="3" class="muted">Agregá chefs</td></tr>';
 }
@@ -539,10 +545,10 @@ if (byId('votante-nuevo')) byId('votante-nuevo').addEventListener('click', ()=>{
 });
 
 // Editor en Ajustes: formularios
-if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', (e)=>{
+if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const id = byId('aj-plato-id').value || uid();
-  const data = {
+  let data = {
     id,
     nombre: byId('aj-plato-nombre').value.trim(),
     descripcion: byId('aj-plato-descripcion').value.trim(),
@@ -550,6 +556,19 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', (e)=
     fotoUrl: byId('aj-plato-foto').value.trim(),
     vuelta: Number(byId('aj-plato-vuelta').value||1),
   };
+  // Si la foto es dataURL y hay nube disponible, subir antes de guardar para que sincronice en todos los dispositivos
+  try {
+    if (data.fotoUrl && typeof data.fotoUrl === 'string' && data.fotoUrl.startsWith('data:') && isCloudEnabled()) {
+      const blob = await (await fetch(data.fotoUrl)).blob();
+      const ext = blob.type.split('/')[1]||'jpg';
+      const file = new File([blob], `plato_${Date.now()}.${ext}`, { type: blob.type });
+      const url = await uploadToFirebase(file);
+      data.fotoUrl = url;
+      // actualizar preview y campo
+      if (byId('aj-plato-preview')) { byId('aj-plato-preview').src = url; byId('aj-plato-preview').style.display = 'block'; }
+      byId('aj-plato-foto').value = url;
+    }
+  } catch {}
   const idx = state.platos.findIndex(p=>p.id===id);
   if (idx>=0) {
     // conservar orden existente
