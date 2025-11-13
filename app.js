@@ -34,7 +34,7 @@ const DEFAULT_FIREBASE_CFG = {
   apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
   authDomain: "discoteca-real.firebaseapp.com",
   projectId: "discoteca-real",
-  storageBucket: "discoteca-real.firebasestorage.app",
+  storageBucket: "discoteca-real.appspot.com",
   appId: "1:468605215361:web:a00c2d8f0733f41ac92380",
   measurementId: "G-6JN5RNF4ME"
 };
@@ -42,6 +42,8 @@ const DEFAULT_FIREBASE_CFG = {
 let state = loadState();
 let session = { userId: null };
 let fb = { app: null, storage: null };
+let cloud = { unsub: null, started: false };
+let isApplyingCloud = false;
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -68,8 +70,18 @@ function loadState() {
   return initial;
 }
 
-function saveState(s) {
+function saveState(s, opts) {
+  const options = opts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  if (options.skipCloud) return;
+  if (isCloudEnabled() && !isApplyingCloud) {
+    try {
+      const inst = ensureFirebase();
+      if (!inst || !firebase.firestore) return;
+      const db = firebase.firestore();
+      db.collection('discoteca').doc('main').set(s).catch(()=>{});
+    } catch {}
+  }
 }
 
 function funPassword(nombre) {
@@ -499,7 +511,9 @@ if (byId('aj-guardar')) byId('aj-guardar').addEventListener('click', ()=>{
   state.settings.tamGrupo = Math.max(1, Number(byId('aj-grupo').value||DEFAULT_SETTINGS.tamGrupo));
   state.settings.votosRequeridos = Math.max(1, Number(byId('aj-requeridos').value||DEFAULT_SETTINGS.votosRequeridos));
   state.settings.useFirebase = !!(byId('aj-fb-flag') && byId('aj-fb-flag').checked);
-  saveState(state); renderRanking();
+  saveState(state);
+  if (state.settings.useFirebase) startCloudSync(); else stopCloudSync();
+  renderRanking();
 });
 
 if (byId('votante-nuevo')) byId('votante-nuevo').addEventListener('click', ()=>{
@@ -697,6 +711,51 @@ function ensureFirebase() {
   } catch { return null; }
 }
 
+function isCloudEnabled() {
+  const cfg = loadFirebaseCfg();
+  return !!state.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
+}
+
+function refreshAll() {
+  try {
+    renderAuthUsers(); renderSettings(); renderChefs(); renderPlatos(); refreshVoteForm(); renderRanking(); initSelectors();
+  } catch {}
+}
+
+function startCloudSync() {
+  if (!isCloudEnabled()) { stopCloudSync(); return; }
+  const inst = ensureFirebase();
+  if (!inst || !firebase.firestore) return;
+  const db = firebase.firestore();
+  // habilitar persistencia offline si es posible (best effort)
+  try { db.enablePersistence && db.enablePersistence({ synchronizeTabs: true }); } catch {}
+  const docRef = db.collection('discoteca').doc('main');
+  // inicializar documento si falta
+  docRef.get().then((doc)=>{ if (!doc.exists) { docRef.set(state).catch(()=>{}); } }).catch(()=>{});
+  if (cloud.unsub) { try { cloud.unsub(); } catch {} }
+  cloud.unsub = docRef.onSnapshot((snap)=>{
+    if (!snap.exists) return;
+    const data = snap.data();
+    if (!data) return;
+    try {
+      const localStr = JSON.stringify(state);
+      const remoteStr = JSON.stringify(data);
+      if (localStr === remoteStr) return;
+    } catch {}
+    isApplyingCloud = true;
+    state = data;
+    saveState(state, { skipCloud: true });
+    refreshAll();
+    isApplyingCloud = false;
+  });
+  cloud.started = true;
+}
+
+function stopCloudSync() {
+  if (cloud.unsub) { try { cloud.unsub(); } catch {} cloud.unsub = null; }
+  cloud.started = false;
+}
+
 // Esperar a que la auth anónima esté lista antes de subir
 function waitForAnonymousAuth(timeoutMs = 7000) {
   const inst = ensureFirebase();
@@ -743,6 +802,11 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
   localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
   byId('fb-status').textContent = 'Firebase guardado localmente';
   ensureFirebase();
+  // Si ya está activado el flag de nube, comenzar sincronización inmediatamente
+  if (state.settings.useFirebase) {
+    startCloudSync();
+    byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
+  }
 });
 
 function populateFirebaseForm() {
@@ -756,6 +820,7 @@ function populateFirebaseForm() {
 }
 populateFirebaseForm();
 ensureFirebase();
+startCloudSync();
 
 // Ocultar bloque Firebase por defecto; mostrar solo si session.isAdmin
 function toggleFirebaseBlock() {
