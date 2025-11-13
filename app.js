@@ -344,7 +344,10 @@ function renderRanking() {
   const { list, totalVotos } = computeRanking({ general, vuelta });
 
   const required = state.settings.votosRequeridos || DEFAULT_SETTINGS.votosRequeridos;
-  const reveal = totalVotos >= required;
+  // Regla solicitada: vuelta 1 siempre revelada; desde vuelta 2 aplica el mínimo configurado
+  const reveal = general
+    ? (totalVotos >= required)
+    : (vuelta === 1 ? true : (totalVotos >= required));
   const overlay = byId('ranking-blur');
   overlay.style.display = reveal ? 'none' : 'flex';
   byId('ranking-info').textContent = reveal ? `Votos: ${totalVotos}` : `Votos: ${totalVotos}/${required} — oculto hasta completar`;
