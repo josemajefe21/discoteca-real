@@ -654,6 +654,7 @@ function initPhotoDropzone() {
   const bar = byId('aj-plato-progress-bar');
   const status = byId('aj-plato-upload-status');
   const pickBtn = byId('aj-plato-pick');
+  let openingPicker = false;
   if (!dz || !file || !preview) return;
   let uploading = false;
   const setImage = async (f) => {
@@ -696,12 +697,17 @@ function initPhotoDropzone() {
       try { file.value = ''; } catch {}
     }
   };
-  dz.addEventListener('click', ()=> file.click());
+  dz.addEventListener('click', (e)=>{ 
+    e.preventDefault(); 
+    e.stopPropagation();
+    if (openingPicker) return;
+    openingPicker = true;
+    try { file.click(); } finally { setTimeout(()=>{ openingPicker = false; }, 400); }
+  });
   dz.addEventListener('dragover', (e)=>{ e.preventDefault(); dz.classList.add('dragover'); });
   dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
   dz.addEventListener('drop', (e)=>{ e.preventDefault(); dz.classList.remove('dragover'); const f = e.dataTransfer.files[0]; setImage(f); });
   file.addEventListener('change', ()=> setImage(file.files[0]));
-  file.addEventListener('input', ()=> setImage(file.files[0]));
   if (pickBtn) pickBtn.addEventListener('click', ()=> file.click());
   dropInited = true;
 }
