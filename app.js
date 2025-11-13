@@ -805,6 +805,63 @@ function stopCloudSync() {
   cloud.started = false;
 }
 
+function setSyncStatus(msg) { try { const el = byId('sync-status'); if (el) el.textContent = msg||''; } catch {} }
+
+async function cloudPush() {
+  try {
+    const inst = ensureFirebase();
+    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
+    const db = firebase.firestore();
+    await db.collection('discoteca').doc('main').set(state);
+    setSyncStatus('Estado subido a la nube');
+    try { console.info('Sync: push OK'); } catch {}
+  } catch (e) {
+    setSyncStatus('Error al subir a la nube');
+    try { console.warn('Sync push error', e); } catch {}
+  }
+}
+
+async function cloudPull() {
+  try {
+    const inst = ensureFirebase();
+    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
+    const db = firebase.firestore();
+    const ref = db.collection('discoteca').doc('main');
+    const snap = await ref.get();
+    if (!snap.exists) { alert('No hay datos en la nube'); return; }
+    const data = snap.data();
+    if (!data) { alert('Documento vacío'); return; }
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); } catch {}
+    isApplyingCloud = true;
+    state = data;
+    saveState(state, { skipCloud: true });
+    refreshAll();
+    isApplyingCloud = false;
+    setSyncStatus('Estado traído de la nube');
+    try { console.info('Sync: pull OK'); } catch {}
+  } catch (e) {
+    setSyncStatus('Error al traer de la nube');
+    try { console.warn('Sync pull error', e); } catch {}
+  }
+}
+
+function restoreBackup() {
+  try {
+    const raw = localStorage.getItem(BACKUP_KEY) || localStorage.getItem(STORAGE_KEY);
+    if (!raw) { alert('No hay respaldo/estado local disponible'); return; }
+    const data = JSON.parse(raw);
+    isApplyingCloud = true;
+    state = data;
+    saveState(state, { skipCloud: true });
+    refreshAll();
+    isApplyingCloud = false;
+    setSyncStatus('Respaldo restaurado (local)');
+    try { console.info('Sync: restore local OK'); } catch {}
+  } catch {
+    setSyncStatus('Error al restaurar respaldo');
+  }
+}
+
 // Esperar a que la auth anónima esté lista antes de subir
 function waitForAnonymousAuth(timeoutMs = 7000) {
   const inst = ensureFirebase();
@@ -986,4 +1043,9 @@ async function autoAssignByButton() {
   if (status) status.textContent = count>0 ? `Asignadas ${count} fotos.` : 'No se encontraron archivos coincidentes.';
 }
 if (byId('aj-auto-assign')) byId('aj-auto-assign').addEventListener('click', autoAssignByButton);
+
+// Controles de sincronización en Ajustes
+if (byId('btn-cloud-push')) byId('btn-cloud-push').addEventListener('click', cloudPush);
+if (byId('btn-cloud-pull')) byId('btn-cloud-pull').addEventListener('click', cloudPull);
+if (byId('btn-restore-backup')) byId('btn-restore-backup').addEventListener('click', restoreBackup);
 
