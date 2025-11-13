@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   useFirebase: false,
 };
 const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
+const BACKUP_KEY = 'discoteca_backup_latest';
 const DEFAULT_FIREBASE_CFG = {
   apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
   authDomain: "discoteca-real.firebaseapp.com",
@@ -46,15 +47,39 @@ let cloud = { unsub: null, started: false };
 let isApplyingCloud = false;
 const ENABLE_LOCAL_PHOTOS_PROBE = false;
 
+function countEntries(s) {
+  try {
+    const platos = Array.isArray(s?.platos) ? s.platos.length : 0;
+    const votos = Array.isArray(s?.votos) ? s.votos.length : 0;
+    const chefs = Array.isArray(s?.chefs) ? s.chefs.length : 0;
+    const voters = Array.isArray(s?.voters) ? s.voters.length : 0;
+    return { platos, votos, chefs, voters, total: platos + votos + chefs + voters };
+  } catch { return { platos:0, votos:0, chefs:0, voters:0, total:0 }; }
+}
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try {
-      const parsed = JSON.parse(raw);
+      let parsed = JSON.parse(raw);
       // backfill de ajustes nuevos
       parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings||{}) };
       if (!parsed.platos) parsed.platos = [];
       if (!parsed.votos) parsed.votos = [];
+
+      // Intento de recuperación: si existe backup local más "grande", preferirlo
+      try {
+        const bakRaw = localStorage.getItem(BACKUP_KEY);
+        if (bakRaw) {
+          const bak = JSON.parse(bakRaw);
+          const cParsed = countEntries(parsed);
+          const cBak = countEntries(bak);
+          if (cBak.total > cParsed.total) {
+            parsed = { ...bak, settings: { ...DEFAULT_SETTINGS, ...(bak.settings||{}) } };
+          }
+        }
+      } catch {}
+
       saveState(parsed, { skipCloud: true });
       return parsed;
     } catch (e) {}
@@ -737,8 +762,21 @@ function startCloudSync() {
   // habilitar persistencia offline si es posible (best effort)
   try { db.enablePersistence && db.enablePersistence({ synchronizeTabs: true }); } catch {}
   const docRef = db.collection('discoteca').doc('main');
-  // inicializar documento si falta
-  docRef.get().then((doc)=>{ if (!doc.exists) { docRef.set(state).catch(()=>{}); } }).catch(()=>{});
+  // Inicial: si no existe, sembrar con local; si existe pero está vacío y local tiene datos, subir local
+  docRef.get().then((doc)=>{
+    try {
+      const localCounts = countEntries(state);
+      if (!doc.exists) {
+        if (localCounts.total > 0) docRef.set(state).catch(()=>{});
+        return;
+      }
+      const remote = doc.data()||{};
+      const remoteCounts = countEntries(remote);
+      if (remoteCounts.total === 0 && localCounts.total > 0) {
+        docRef.set(state).catch(()=>{});
+      }
+    } catch {}
+  }).catch(()=>{});
   if (cloud.unsub) { try { cloud.unsub(); } catch {} }
   try { console.info('CloudSync: iniciando suscripción a discoteca/main'); } catch {}
   cloud.unsub = docRef.onSnapshot((snap)=>{
@@ -752,6 +790,8 @@ function startCloudSync() {
       if (localStr === remoteStr) return;
     } catch {}
     isApplyingCloud = true;
+    // Guardar respaldo local antes de aplicar remoto
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); console.info('CloudSync: respaldo local guardado'); } catch {}
     state = data;
     saveState(state, { skipCloud: true });
     refreshAll();
