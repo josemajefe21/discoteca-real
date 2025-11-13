@@ -375,18 +375,43 @@ byId('toggle-general').addEventListener('change', ()=>{ renderRanking(); renderC
 // Chefs
 function renderChefs() {
   const tb = byId('tabla-chefs').querySelector('tbody');
-  // Alinear con selección de ranking actual (general o por vuelta)
+  // Puntaje de Chefs basado exclusivamente en podio (3,2,1 por posiciones)
   const general = !!(byId('toggle-general') && byId('toggle-general').checked);
-  const vuelta = Number(byId('ranking-vuelta')?.value||1);
-  const rank = computeRanking({ general, vuelta }).list;
-  // mapear platoId -> chefId
+  const vueltaSel = Number(byId('ranking-vuelta')?.value||1);
   const platoChef = new Map(state.platos.map(p=>[p.id, p.chefId]));
-  // acumular puntaje por chef a partir del ranking (score ya representa suma de 3/2/1 de votos)
-  const chefScores = new Map();
-  for (const r of rank) {
-    const chefId = platoChef.get(r.platoId);
-    if (!chefId) continue;
-    chefScores.set(chefId, (chefScores.get(chefId)||0) + (r.score||0));
+  const chefScores = new Map(); // chefId -> puntos por podio acumulados
+  function podiumForVuelta(v) {
+    // usar podio manual si existe, sino top 3 calculado
+    if (state.manualPodio && state.manualPodio[v] && state.manualPodio[v].length) {
+      return state.manualPodio[v].slice(0,3).map((it, idx)=>({
+        platoId: it.platoId || null,
+        nombre: it.nombre || '',
+        puntos: [3,2,1][idx] || 0,
+      }));
+    }
+    const list = computeRanking({ general: false, vuelta: v }).list.slice(0,3);
+    return list.map((r, idx)=>({ platoId: r.platoId||null, nombre: r.nombre, puntos: [3,2,1][idx]||0 }));
+  }
+  function addPoints(entry) {
+    let chefId = null;
+    if (entry.platoId) {
+      chefId = platoChef.get(entry.platoId) || null;
+    }
+    if (!chefId && entry.nombre) {
+      const p = state.platos.find(x => (x.nombre||'').toLowerCase() === (entry.nombre||'').toLowerCase());
+      if (p) chefId = p.chefId;
+    }
+    if (!chefId) return;
+    chefScores.set(chefId, (chefScores.get(chefId)||0) + (entry.puntos||0));
+  }
+  if (general) {
+    const maxV = Math.max(1, ...state.platos.map(p=>p.vuelta||1));
+    for (let v=1; v<=maxV; v++) {
+      const podio = podiumForVuelta(v);
+      podio.forEach(addPoints);
+    }
+  } else {
+    podiumForVuelta(vueltaSel).forEach(addPoints);
   }
   const rows = state.chefs.map(c => {
     const platosCount = state.platos.filter(p=>p.chefId===c.id).length;
@@ -627,6 +652,7 @@ function initPhotoDropzone() {
   const preview = byId('aj-plato-preview');
   const progress = byId('aj-plato-progress');
   const bar = byId('aj-plato-progress-bar');
+  const status = byId('aj-plato-upload-status');
   if (!dz || !file || !preview) return;
   let uploading = false;
   const setImage = async (f) => {
@@ -639,13 +665,21 @@ function initPhotoDropzone() {
         uploading = true;
         progress.style.display = '';
         bar.style.width = '0%';
-        const url = await uploadToFirebase(f, (pct)=>{ bar.style.width = pct+'%'; });
+        if (status) status.textContent = 'Subiendo imagen... 0%';
+        const submitBtn = byId('aj-form-plato')?.querySelector('button[type=\"submit\"]');
+        if (submitBtn) submitBtn.disabled = true;
+        const url = await uploadToFirebase(f, (pct)=>{ bar.style.width = pct+'%'; if (status) status.textContent = `Subiendo imagen... ${pct}%`; });
         byId('aj-plato-foto').value = url;
         preview.src = url; preview.style.display = 'block';
         progress.style.display = 'none';
+        if (status) status.textContent = 'Imagen subida ✔';
+        if (submitBtn) submitBtn.disabled = false;
         uploading = false;
       } catch (e) {
         progress.style.display = 'none';
+        if (status) status.textContent = 'Error subiendo imagen. Se usará copia local.';
+        const submitBtn = byId('aj-form-plato')?.querySelector('button[type=\"submit\"]');
+        if (submitBtn) submitBtn.disabled = false;
         uploading = false;
         // fallback dataURL
         const reader = new FileReader();
