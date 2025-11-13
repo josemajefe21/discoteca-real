@@ -39,12 +39,22 @@ const DEFAULT_FIREBASE_CFG = {
   appId: "1:468605215361:web:a00c2d8f0733f41ac92380",
   measurementId: "G-6JN5RNF4ME"
 };
+const CLOUDINARY_CFG_KEY = 'discoteca_cld_cfg_v1';
 
 let state = loadState();
 let session = { userId: null };
 let fb = { app: null, storage: null };
 let cloud = { unsub: null, started: false };
 let isApplyingCloud = false;
+
+function loadCloudinaryCfg() {
+  try {
+    const raw = localStorage.getItem(CLOUDINARY_CFG_KEY);
+    if (!raw) return null;
+    const cfg = JSON.parse(raw);
+    return cfg && cfg.cloud && cfg.preset ? cfg : null;
+  } catch { return null; }
+}
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -588,11 +598,14 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', asyn
   };
   // Si la foto es dataURL y hay nube disponible, subir antes de guardar para que sincronice en todos los dispositivos
   try {
-    if (data.fotoUrl && typeof data.fotoUrl === 'string' && data.fotoUrl.startsWith('data:') && isCloudEnabled()) {
+    const cld = loadCloudinaryCfg();
+    const useCld = !!(cld && cld.cloud && cld.preset);
+    const useFb = isCloudEnabled();
+    if (data.fotoUrl && typeof data.fotoUrl === 'string' && data.fotoUrl.startsWith('data:') && (useCld || useFb)) {
       const blob = await (await fetch(data.fotoUrl)).blob();
       const ext = blob.type.split('/')[1]||'jpg';
       const file = new File([blob], `plato_${Date.now()}.${ext}`, { type: blob.type });
-      const url = await uploadToFirebase(file);
+      const url = useCld ? await uploadToCloudinary(file) : await uploadToFirebase(file);
       data.fotoUrl = url;
       // actualizar preview y campo
       if (byId('aj-plato-preview')) { byId('aj-plato-preview').src = url; byId('aj-plato-preview').style.display = 'block'; }
@@ -660,8 +673,10 @@ function initPhotoDropzone() {
   const setImage = async (f) => {
     if (!f || !f.type?.startsWith('image/')) return;
     // Si hay Firebase configurado, subir a Storage, sino usar dataURL
+    const cld = loadCloudinaryCfg();
+    const useCld = !!(cld && cld.cloud && cld.preset);
     const useFb = isCloudEnabled();
-    if (useFb) {
+    if (useCld || useFb) {
       try {
         if (uploading) return;
         uploading = true;
@@ -670,7 +685,8 @@ function initPhotoDropzone() {
         if (status) status.textContent = 'Subiendo imagen... 0%';
         const submitBtn = byId('aj-form-plato')?.querySelector('button[type=\"submit\"]');
         if (submitBtn) submitBtn.disabled = true;
-        const url = await uploadToFirebase(f, (pct)=>{ bar.style.width = pct+'%'; if (status) status.textContent = `Subiendo imagen... ${pct}%`; });
+        const updater = (pct)=>{ bar.style.width = pct+'%'; if (status) status.textContent = `Subiendo imagen... ${pct}%`; };
+        const url = useCld ? await uploadToCloudinary(f, updater) : await uploadToFirebase(f, updater);
         byId('aj-plato-foto').value = url;
         preview.src = url; preview.style.display = 'block';
         progress.style.display = 'none';
@@ -939,6 +955,38 @@ async function uploadToFirebase(file, onProgress) {
   });
 }
 
+async function uploadToCloudinary(file, onProgress) {
+  const cfg = loadCloudinaryCfg();
+  if (!cfg || !cfg.cloud || !cfg.preset) throw new Error('Cloudinary no configurado');
+  const url = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cfg.cloud)}/upload`;
+  return await new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', cfg.preset);
+    if (cfg.folder) form.append('folder', cfg.folder);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress || !e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      onProgress(pct);
+    };
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4) return;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          resolve(resp.secure_url || resp.url);
+        } catch (err) { reject(err); }
+      } else {
+        reject(new Error(`Cloudinary error ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Error de red al subir a Cloudinary'));
+    xhr.send(form);
+  });
+}
+
 // Guardar/mostrar config Firebase en Ajustes
 if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
   const cfg = {
@@ -951,6 +999,17 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
   localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
   byId('fb-status').textContent = 'Firebase guardado localmente';
   ensureFirebase();
+});
+
+// Guardar/mostrar config Cloudinary en Ajustes
+if (byId('cld-guardar')) byId('cld-guardar').addEventListener('click', ()=>{
+  const cfg = {
+    cloud: byId('cld-cloud').value.trim(),
+    preset: byId('cld-preset').value.trim(),
+    folder: byId('cld-folder').value.trim(),
+  };
+  localStorage.setItem(CLOUDINARY_CFG_KEY, JSON.stringify(cfg));
+  if (byId('cld-status')) byId('cld-status').textContent = 'Cloudinary guardado localmente';
 });
 
 // Botones de sincronización manual
@@ -1009,6 +1068,22 @@ function toggleFirebaseBlock() {
   if (byId('fb-block-title')) byId('fb-block-title').style.display = show ? '' : 'none';
 }
 toggleFirebaseBlock();
+
+function populateCloudinaryForm() {
+  const cfg = loadCloudinaryCfg();
+  if (!cfg) return;
+  if (byId('cld-cloud')) byId('cld-cloud').value = cfg.cloud||'';
+  if (byId('cld-preset')) byId('cld-preset').value = cfg.preset||'';
+  if (byId('cld-folder')) byId('cld-folder').value = cfg.folder||'';
+}
+populateCloudinaryForm();
+
+function toggleCloudinaryBlock() {
+  const show = !!session.isAdmin;
+  if (byId('cld-block')) byId('cld-block').style.display = show ? '' : 'none';
+  if (byId('cld-block-title')) byId('cld-block-title').style.display = show ? '' : 'none';
+}
+toggleCloudinaryBlock();
 
 // Migración: corregir URLs antiguas de fotos con dominio incorrecto
 (function migratePhotoUrls() {
