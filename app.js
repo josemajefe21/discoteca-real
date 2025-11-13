@@ -57,47 +57,6 @@ function countEntries(s) {
   } catch { return { platos:0, votos:0, chefs:0, voters:0, total:0 }; }
 }
 
-function normalizeState(input) {
-  const s = input && typeof input === 'object' ? input : {};
-  const settings = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
-  const voters = Array.isArray(s.voters) ? s.voters.map(v => ({
-    id: v.id || uid(),
-    nombre: (v.nombre || '').toString(),
-    activo: v.activo !== false,
-    password: (v.password || '').toString(),
-  })) : [];
-  const chefs = Array.isArray(s.chefs) ? s.chefs.map(c => ({
-    id: c.id || uid(),
-    nombre: (c.nombre || '').toString(),
-    alias: (c.alias || '').toString(),
-  })) : [];
-  const platos = Array.isArray(s.platos) ? s.platos.map(p => ({
-    id: p.id || uid(),
-    nombre: (p.nombre || '').toString(),
-    descripcion: (p.descripcion || '').toString(),
-    chefId: p.chefId || (chefs[0]?.id || ''),
-    fotoUrl: (p.fotoUrl || '').toString(),
-    vuelta: Math.max(1, Number(p.vuelta || 1)),
-    orden: Number(p.orden || 0),
-  })) : [];
-  const votos = Array.isArray(s.votos) ? s.votos.map(v => ({
-    id: v.id || uid(),
-    vuelta: Math.max(1, Number(v.vuelta || 1)),
-    userId: (v.userId || '').toString(),
-    picks: Array.isArray(v.picks) ? v.picks.slice(0,3).filter(Boolean) : [],
-  })) : [];
-  const baseScores = typeof s.baseScores === 'object' && s.baseScores !== null ? s.baseScores : {};
-  return {
-    version: Number(s.version || 1),
-    settings,
-    voters,
-    chefs: chefs.length ? chefs : DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
-    platos,
-    votos,
-    baseScores,
-  };
-}
-
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
@@ -132,7 +91,6 @@ function loadState() {
     chefs: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
     platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
-    baseScores: {},
   };
   saveState(initial, { skipCloud: true });
   return initial;
@@ -380,14 +338,6 @@ function computeRanking({ general=false, vuelta=1 }) {
   const puntos = new Map();
   const counts = new Map(); // {platoId: {p3,p2,p1}}
   const votos = general ? state.votos : state.votos.filter(v=>v.vuelta===vuelta);
-  // Puntos base (permiten fijar un podio inicial por vuelta)
-  if (!general && state.baseScores && state.baseScores[String(vuelta)]) {
-    const base = state.baseScores[String(vuelta)];
-    for (const [pid, score] of Object.entries(base)) {
-      const num = Number(score)||0;
-      if (num>0) puntos.set(pid, (puntos.get(pid)||0)+num);
-    }
-  }
   for (const v of votos) {
     const [p3,p2,p1] = v.picks; // top1=3pts, top2=2pts, top3=1pt
     if (!p3 || !p2 || !p1) continue;
@@ -416,28 +366,10 @@ function renderRanking() {
   const { list, totalVotos } = computeRanking({ general, vuelta });
 
   const required = state.settings.votosRequeridos || DEFAULT_SETTINGS.votosRequeridos;
-  const hasBase = !!(state.baseScores && state.baseScores[String(vuelta)] && Object.keys(state.baseScores[String(vuelta)]).length>0);
-  const reveal = totalVotos >= required || hasBase;
+  const reveal = totalVotos >= required;
   const overlay = byId('ranking-blur');
   overlay.style.display = reveal ? 'none' : 'flex';
   byId('ranking-info').textContent = reveal ? `Votos: ${totalVotos}` : `Votos: ${totalVotos}/${required} — oculto hasta completar`;
-
-  // Podio para Vuelta 1 (o para la vuelta seleccionada)
-  const podium = byId('podium');
-  if (podium) {
-    const top3 = list.slice(0,3);
-    if (top3.length) {
-      podium.innerHTML = `
-        <div class="podium-wrap">
-          <div class="podium-item first"><div class="place">1</div><div class="name">${top3[0].nombre}</div><div class="pts">${top3[0].score} pts</div></div>
-          ${top3[1]?`<div class="podium-item second"><div class="place">2</div><div class="name">${top3[1].nombre}</div><div class="pts">${top3[1].score} pts</div></div>`:''}
-          ${top3[2]?`<div class="podium-item third"><div class="place">3</div><div class="name">${top3[2].nombre}</div><div class="pts">${top3[2].score} pts</div></div>`:''}
-        </div>
-      `;
-    } else {
-      podium.innerHTML = '';
-    }
-  }
 
   const tb = byId('tabla-ranking').querySelector('tbody');
   tb.innerHTML = list.map((row, i)=>`
@@ -872,151 +804,6 @@ function stopCloudSync() {
   if (cloud.unsub) { try { cloud.unsub(); } catch {} cloud.unsub = null; }
   cloud.started = false;
 }
-
-// Controles rápidos (barra superior)
-function quickSetStatus(msg) { try { const el = byId('qa-status'); if (el) el.textContent = msg||''; } catch {} }
-function quickShowRanking() {
-  try {
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    Object.values(views).forEach(v => v.classList.remove('visible'));
-    views.ranking.classList.add('visible');
-    renderRanking();
-    quickSetStatus('Mostrando Ranking');
-  } catch {}
-}
-async function quickPushCloud() {
-  try {
-    const inst = ensureFirebase();
-    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
-    const db = firebase.firestore();
-    await db.collection('discoteca').doc('main').set(state);
-    quickSetStatus('Estado subido a la nube');
-    console.info('Quick: push a Firestore OK');
-  } catch (e) {
-    quickSetStatus('Error al subir a la nube');
-    console.warn('Quick push error', e);
-  }
-}
-async function quickPullCloud() {
-  try {
-    const inst = ensureFirebase();
-    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
-    const db = firebase.firestore();
-    const ref = db.collection('discoteca').doc('main');
-    const snap = await ref.get();
-    if (!snap.exists) { alert('No hay datos en la nube'); return; }
-    const data = snap.data();
-    if (!data) { alert('Documento vacío'); return; }
-    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); } catch {}
-    isApplyingCloud = true;
-    state = data;
-    saveState(state, { skipCloud: true });
-    refreshAll();
-    isApplyingCloud = false;
-    quickSetStatus('Estado traído de la nube');
-    console.info('Quick: pull de Firestore OK');
-  } catch (e) {
-    quickSetStatus('Error al traer de la nube');
-    console.warn('Quick pull error', e);
-  }
-}
-
-// Bind de barra rápida
-if (byId('qa-ranking')) byId('qa-ranking').addEventListener('click', quickShowRanking);
-if (byId('qa-export')) byId('qa-export').addEventListener('click', ()=>{
-  try {
-    const data = JSON.stringify(state, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `discoteca-backup-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    quickSetStatus('Exportado JSON');
-  } catch { quickSetStatus('Error al exportar'); }
-});
-if (byId('qa-import')) byId('qa-import').addEventListener('click', ()=>{
-  const fi = byId('qa-file-import') || byId('file-import');
-  if (fi) fi.click();
-});
-if (byId('qa-file-import')) byId('qa-file-import').addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  try {
-    const data = JSON.parse(text);
-    if (!data || !data.voters || !data.chefs || !data.platos || !data.votos) throw new Error('Formato inválido');
-    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); } catch {}
-    state = data; saveState(state, { skipCloud: true });
-    renderAuthUsers(); renderSettings(); renderChefs(); renderPlatos(); refreshVoteForm(); renderRanking(); initSelectors();
-    quickSetStatus('Importado JSON');
-  } catch (e2) {
-    quickSetStatus('Error al importar JSON');
-  }
-});
-if (byId('qa-push')) byId('qa-push').addEventListener('click', quickPushCloud);
-if (byId('qa-pull')) byId('qa-pull').addEventListener('click', quickPullCloud);
-if (byId('qa-podio-v1')) byId('qa-podio-v1').addEventListener('click', ()=>{
-  // Buscar/crear los 3 platos y fijar baseScores de Vuelta 1
-  function findByTextContains(text) {
-    const t = text.toLowerCase();
-    return state.platos.find(p => (p.nombre||'').toLowerCase().includes(t));
-  }
-  function ensurePlato(nombre) {
-    let p = findByTextContains(nombre);
-    if (!p) {
-      p = {
-        id: uid(),
-        nombre,
-        descripcion: '',
-        chefId: state.chefs[0]?.id || (state.chefs[0]={id:uid(), nombre:'Chef', alias:''}).id,
-        fotoUrl: '',
-        vuelta: 1,
-        orden: (Math.max(0, ...state.platos.filter(x=>x.vuelta===1).map(x=>x.orden||0)) + 1)
-      };
-      state.platos.push(p);
-    } else {
-      p.vuelta = 1;
-    }
-    return p.id;
-  }
-  const idA = ensurePlato('Hamburguesa crujiente de pollo frito');
-  const idB = ensurePlato('Osobuco braseado al Malbec');
-  const idC = ensurePlato('Pechuguitas de pollo en reducción de Mostaza Dijon y Miel');
-  if (!state.baseScores) state.baseScores = {};
-  state.baseScores['1'] = { [idA]: 21, [idB]: 17, [idC]: 6 };
-  saveState(state);
-  renderPlatos(); renderRanking(); renderSettings();
-  quickSetStatus('Podio V1 fijado (21/17/6)');
-  // Empujar a la nube
-  quickPushCloud();
-});
-if (byId('qa-restore')) byId('qa-restore').addEventListener('click', ()=>{
-  try {
-    const raw = localStorage.getItem(BACKUP_KEY) || localStorage.getItem(STORAGE_KEY);
-    if (!raw) { alert('No hay respaldo/estado local disponible'); return; }
-    const data = JSON.parse(raw);
-    const normalized = normalizeState(data);
-    state = normalized;
-    saveState(state, { skipCloud: true });
-    refreshAll();
-    quickShowRanking();
-    quickSetStatus('Respaldo restaurado y aplicado');
-    console.info('Quick: respaldo restaurado (normalized)');
-  } catch (e) {
-    quickSetStatus('Error al restaurar respaldo');
-  }
-});
-if (byId('qa-copy')) byId('qa-copy').addEventListener('click', async ()=>{
-  try {
-    const primary = localStorage.getItem(STORAGE_KEY);
-    const backup = localStorage.getItem(BACKUP_KEY);
-    const text = primary || backup || JSON.stringify(state, null, 2);
-    await (navigator.clipboard && navigator.clipboard.writeText(text));
-    quickSetStatus('JSON copiado al portapapeles');
-  } catch {
-    quickSetStatus('No se pudo copiar JSON');
-  }
-});
 
 // Esperar a que la auth anónima esté lista antes de subir
 function waitForAnonymousAuth(timeoutMs = 7000) {

@@ -31,18 +31,6 @@
             <button data-route="backup" class="nav-btn">Exportar/Importar</button>
         </nav>
     </header>
-    <div id="quick-actions" class="quick-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:rgba(0,0,0,0.05)">
-        <button id="qa-ranking" class="ghost">Ver Ranking</button>
-        <button id="qa-export" class="ghost">Exportar JSON</button>
-        <input type="file" id="qa-file-import" accept="application/json" style="display:none">
-        <button id="qa-import" class="ghost">Importar JSON</button>
-        <button id="qa-push" class="ghost">Subir a nube</button>
-        <button id="qa-pull" class="ghost">Traer de nube</button>
-        <button id="qa-podio-v1" class="ghost">Fijar podio V1</button>
-        <button id="qa-restore" class="ghost">Restaurar respaldo</button>
-        <button id="qa-copy" class="ghost">Copiar JSON</button>
-        <span id="qa-status" class="muted" style="margin-left:auto"></span>
-    </div>
 
     <section class="hero">
         <canvas id="heroCanvas" width="1200" height="200" aria-hidden="true"></canvas>
@@ -108,7 +96,6 @@
         <section id="view-ranking" class="view">
             <h2>Ranking</h2>
             <div class="card">
-                <div id="podium" class="podium"></div>
                 <div class="grid-3">
                     <label>Vuelta
                         <select id="ranking-vuelta"></select>
