@@ -713,9 +713,11 @@ function ensureFirebase() {
   } catch { return null; }
 }
 
-function isCloudEnabled() {
+function isCloudEnabled(explicitState) {
+  const s = explicitState || (typeof state !== 'undefined' ? state : null);
+  if (!s || !s.settings) return false;
   const cfg = loadFirebaseCfg();
-  return !!state.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
+  return !!s.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
 }
 
 function refreshAll() {
