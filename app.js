@@ -174,6 +174,13 @@ drawHero();
 // Utilidades
 const byId = (id) => document.getElementById(id);
 const uid = () => Math.random().toString(36).slice(2,10);
+const debounce = (fn, ms = 500) => {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(()=>fn(...args), ms);
+  };
+};
 
 // Inicializar selects y tablas
 function initSelectors() {
@@ -640,6 +647,33 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', asyn
   renderPlatos(); renderSettings(); refreshVoteForm(); initSelectors();
 });
 if (byId('aj-plato-reset')) byId('aj-plato-reset').addEventListener('click', ()=>{ byId('aj-plato-id').value=''; });
+
+// Auto-guardado de plato al editar (sin botón) cuando es un plato existente
+function autoSavePlatoEdited() {
+  const id = byId('aj-plato-id')?.value;
+  if (!id) return; // sólo auto-guardar si es edición de un plato existente
+  const idx = state.platos.findIndex(p=>p.id===id);
+  if (idx<0) return;
+  const nombre = (byId('aj-plato-nombre')?.value||'').trim();
+  const chefId = byId('aj-plato-chef')?.value||'';
+  const vuelta = Number(byId('aj-plato-vuelta')?.value||1);
+  const descripcion = (byId('aj-plato-descripcion')?.value||'').trim();
+  const fotoUrl = (byId('aj-plato-foto')?.value||'').trim();
+  if (!nombre || !chefId || !vuelta) return;
+  const prev = state.platos[idx];
+  const updated = { ...prev, nombre, chefId, vuelta, descripcion, fotoUrl };
+  state.platos[idx] = updated;
+  saveState(state);
+  renderPlatos(); renderSettings(); refreshVoteForm(); renderRanking();
+}
+const autoSavePlatoEditedDebounced = debounce(autoSavePlatoEdited, 600);
+['aj-plato-nombre','aj-plato-chef','aj-plato-vuelta','aj-plato-descripcion','aj-plato-foto'].forEach(id=>{
+  const el = byId(id);
+  if (el) {
+    el.addEventListener('input', autoSavePlatoEditedDebounced);
+    el.addEventListener('change', autoSavePlatoEditedDebounced);
+  }
+});
 
 if (byId('aj-form-chef')) byId('aj-form-chef').addEventListener('submit', (e)=>{
   e.preventDefault();
