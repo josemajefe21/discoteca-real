@@ -600,7 +600,7 @@ if (byId('aj-form-plato')) byId('aj-form-plato').addEventListener('submit', asyn
   try {
     const cld = loadCloudinaryCfg();
     const useCld = !!(cld && cld.cloud && cld.preset);
-    const useFb = isCloudEnabled();
+    const useFb = canUploadToFirebaseStorage();
     if (data.fotoUrl && typeof data.fotoUrl === 'string' && data.fotoUrl.startsWith('data:') && (useCld || useFb)) {
       const blob = await (await fetch(data.fotoUrl)).blob();
       const ext = blob.type.split('/')[1]||'jpg';
@@ -675,7 +675,7 @@ function initPhotoDropzone() {
     // Si hay Firebase configurado, subir a Storage, sino usar dataURL
     const cld = loadCloudinaryCfg();
     const useCld = !!(cld && cld.cloud && cld.preset);
-    const useFb = isCloudEnabled();
+    const useFb = canUploadToFirebaseStorage();
     if (useCld || useFb) {
       try {
         if (uploading) return;
@@ -702,13 +702,23 @@ function initPhotoDropzone() {
         uploading = false;
         // fallback dataURL
         const reader = new FileReader();
-        reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          byId('aj-plato-foto').value = dataUrl;
+          preview.src = dataUrl; preview.style.display = 'block';
+          if (status) status.textContent = 'Imagen lista (local)';
+        };
         reader.readAsDataURL(f);
         try { file.value = ''; } catch {}
       }
     } else {
       const reader = new FileReader();
-      reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        byId('aj-plato-foto').value = dataUrl;
+        preview.src = dataUrl; preview.style.display = 'block';
+        if (status) status.textContent = 'Imagen lista (local)';
+      };
       reader.readAsDataURL(f);
       try { file.value = ''; } catch {}
     }
@@ -821,6 +831,15 @@ function isCloudEnabled() {
   const cfg = loadFirebaseCfg();
   const flag = (typeof state !== 'undefined' && state && state.settings && state.settings.syncCloud !== false);
   return flag && !!cfg && !!window.firebase && !!firebase.firestore;
+}
+
+function canUploadToFirebaseStorage() {
+  try {
+    const useFlag = !!(state && state.settings && state.settings.useFirebase);
+    if (!useFlag) return false;
+    const inst = ensureFirebase();
+    return !!(inst && window.firebase && firebase.storage);
+  } catch { return false; }
 }
 
 function refreshAll() {
