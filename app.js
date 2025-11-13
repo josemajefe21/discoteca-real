@@ -369,8 +369,8 @@ function renderRanking() {
   // Podio (manual si existe; si no, top 3 calculado) solo cuando no es general
   renderPodio(general ? null : vuelta, { list, reveal });
 }
-byId('ranking-vuelta').addEventListener('change', renderRanking);
-byId('toggle-general').addEventListener('change', renderRanking);
+byId('ranking-vuelta').addEventListener('change', ()=>{ renderRanking(); renderChefs(); });
+byId('toggle-general').addEventListener('change', ()=>{ renderRanking(); renderChefs(); });
 
 // Chefs
 function renderChefs() {
@@ -632,8 +632,7 @@ function initPhotoDropzone() {
   const setImage = async (f) => {
     if (!f || !f.type?.startsWith('image/')) return;
     // Si hay Firebase configurado, subir a Storage, sino usar dataURL
-    const cfg = loadFirebaseCfg();
-    const useFb = !!state.settings.useFirebase && !!cfg;
+    const useFb = isCloudEnabled();
     if (useFb) {
       try {
         if (uploading) return;
