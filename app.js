@@ -30,7 +30,6 @@ const DEFAULT_SETTINGS = {
   useFirebase: false,
 };
 const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
-const BACKUP_KEY = 'discoteca_backup_latest';
 const DEFAULT_FIREBASE_CFG = {
   apiKey: "AIzaSyDDp4EMH6iK-SjoOZOaJRNCn-OcHgrwSzQ",
   authDomain: "discoteca-real.firebaseapp.com",
@@ -45,42 +44,17 @@ let session = { userId: null };
 let fb = { app: null, storage: null };
 let cloud = { unsub: null, started: false };
 let isApplyingCloud = false;
-const ENABLE_LOCAL_PHOTOS_PROBE = false;
-
-function countEntries(s) {
-  try {
-    const platos = Array.isArray(s?.platos) ? s.platos.length : 0;
-    const votos = Array.isArray(s?.votos) ? s.votos.length : 0;
-    const chefs = Array.isArray(s?.chefs) ? s.chefs.length : 0;
-    const voters = Array.isArray(s?.voters) ? s.voters.length : 0;
-    return { platos, votos, chefs, voters, total: platos + votos + chefs + voters };
-  } catch { return { platos:0, votos:0, chefs:0, voters:0, total:0 }; }
-}
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
     try {
-      let parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
       // backfill de ajustes nuevos
       parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings||{}) };
       if (!parsed.platos) parsed.platos = [];
       if (!parsed.votos) parsed.votos = [];
-
-      // Intento de recuperación: si existe backup local más "grande", preferirlo
-      try {
-        const bakRaw = localStorage.getItem(BACKUP_KEY);
-        if (bakRaw) {
-          const bak = JSON.parse(bakRaw);
-          const cParsed = countEntries(parsed);
-          const cBak = countEntries(bak);
-          if (cBak.total > cParsed.total) {
-            parsed = { ...bak, settings: { ...DEFAULT_SETTINGS, ...(bak.settings||{}) } };
-          }
-        }
-      } catch {}
-
-      saveState(parsed, { skipCloud: true });
+      saveState(parsed);
       return parsed;
     } catch (e) {}
   }
@@ -92,7 +66,7 @@ function loadState() {
     platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
   };
-  saveState(initial, { skipCloud: true });
+  saveState(initial);
   return initial;
 }
 
@@ -100,16 +74,12 @@ function saveState(s, opts) {
   const options = opts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   if (options.skipCloud) return;
-  // Evitar usar 'state' aquí (puede no estar inicializado durante loadState)
-  const cloudFlag = isCloudEnabled(s);
-  if (cloudFlag && !isApplyingCloud) {
+  if (isCloudEnabled() && !isApplyingCloud) {
     try {
       const inst = ensureFirebase();
       if (!inst || !firebase.firestore) return;
       const db = firebase.firestore();
-      db.collection('discoteca').doc('main').set(s)
-        .then(()=>{ try { console.info('CloudSync: estado enviado a Firestore'); } catch {} })
-        .catch(()=>{});
+      db.collection('discoteca').doc('main').set(s).catch(()=>{});
     } catch {}
   }
 }
@@ -735,17 +705,15 @@ function ensureFirebase() {
   try {
     fb.app = firebase.apps?.length ? firebase.app() : firebase.initializeApp(cfg);
     fb.storage = firebase.storage();
-    try { console.info('Firebase: inicializado', { projectId: cfg.projectId, storageBucket: cfg.storageBucket }); } catch {}
     // no esperar aquí; se asegura antes de subir
     firebase.auth().signInAnonymously().catch(()=>{});
     return fb;
-  } catch (e) { try { console.warn('Firebase: error al inicializar', e); } catch {} return null; }
+  } catch { return null; }
 }
 
-function isCloudEnabled(explicitState) {
-  // No requerimos ningún toggle; si hay config Firebase válida y Firestore cargado, habilitamos sync
+function isCloudEnabled() {
   const cfg = loadFirebaseCfg();
-  return !!cfg && !!window.firebase && !!firebase.firestore;
+  return !!state.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
 }
 
 function refreshAll() {
@@ -762,36 +730,19 @@ function startCloudSync() {
   // habilitar persistencia offline si es posible (best effort)
   try { db.enablePersistence && db.enablePersistence({ synchronizeTabs: true }); } catch {}
   const docRef = db.collection('discoteca').doc('main');
-  // Inicial: si no existe, sembrar con local; si existe pero está vacío y local tiene datos, subir local
-  docRef.get().then((doc)=>{
-    try {
-      const localCounts = countEntries(state);
-      if (!doc.exists) {
-        if (localCounts.total > 0) docRef.set(state).catch(()=>{});
-        return;
-      }
-      const remote = doc.data()||{};
-      const remoteCounts = countEntries(remote);
-      if (remoteCounts.total === 0 && localCounts.total > 0) {
-        docRef.set(state).catch(()=>{});
-      }
-    } catch {}
-  }).catch(()=>{});
+  // inicializar documento si falta
+  docRef.get().then((doc)=>{ if (!doc.exists) { docRef.set(state).catch(()=>{}); } }).catch(()=>{});
   if (cloud.unsub) { try { cloud.unsub(); } catch {} }
-  try { console.info('CloudSync: iniciando suscripción a discoteca/main'); } catch {}
   cloud.unsub = docRef.onSnapshot((snap)=>{
     if (!snap.exists) return;
     const data = snap.data();
     if (!data) return;
-    try { console.info('CloudSync: snapshot recibido'); } catch {}
     try {
       const localStr = JSON.stringify(state);
       const remoteStr = JSON.stringify(data);
       if (localStr === remoteStr) return;
     } catch {}
     isApplyingCloud = true;
-    // Guardar respaldo local antes de aplicar remoto
-    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); console.info('CloudSync: respaldo local guardado'); } catch {}
     state = data;
     saveState(state, { skipCloud: true });
     refreshAll();
@@ -803,63 +754,6 @@ function startCloudSync() {
 function stopCloudSync() {
   if (cloud.unsub) { try { cloud.unsub(); } catch {} cloud.unsub = null; }
   cloud.started = false;
-}
-
-function setSyncStatus(msg) { try { const el = byId('sync-status'); if (el) el.textContent = msg||''; } catch {} }
-
-async function cloudPush() {
-  try {
-    const inst = ensureFirebase();
-    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
-    const db = firebase.firestore();
-    await db.collection('discoteca').doc('main').set(state);
-    setSyncStatus('Estado subido a la nube');
-    try { console.info('Sync: push OK'); } catch {}
-  } catch (e) {
-    setSyncStatus('Error al subir a la nube');
-    try { console.warn('Sync push error', e); } catch {}
-  }
-}
-
-async function cloudPull() {
-  try {
-    const inst = ensureFirebase();
-    if (!inst || !firebase.firestore) { alert('Configura Firebase primero'); return; }
-    const db = firebase.firestore();
-    const ref = db.collection('discoteca').doc('main');
-    const snap = await ref.get();
-    if (!snap.exists) { alert('No hay datos en la nube'); return; }
-    const data = snap.data();
-    if (!data) { alert('Documento vacío'); return; }
-    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(state)); } catch {}
-    isApplyingCloud = true;
-    state = data;
-    saveState(state, { skipCloud: true });
-    refreshAll();
-    isApplyingCloud = false;
-    setSyncStatus('Estado traído de la nube');
-    try { console.info('Sync: pull OK'); } catch {}
-  } catch (e) {
-    setSyncStatus('Error al traer de la nube');
-    try { console.warn('Sync pull error', e); } catch {}
-  }
-}
-
-function restoreBackup() {
-  try {
-    const raw = localStorage.getItem(BACKUP_KEY) || localStorage.getItem(STORAGE_KEY);
-    if (!raw) { alert('No hay respaldo/estado local disponible'); return; }
-    const data = JSON.parse(raw);
-    isApplyingCloud = true;
-    state = data;
-    saveState(state, { skipCloud: true });
-    refreshAll();
-    isApplyingCloud = false;
-    setSyncStatus('Respaldo restaurado (local)');
-    try { console.info('Sync: restore local OK'); } catch {}
-  } catch {
-    setSyncStatus('Error al restaurar respaldo');
-  }
 }
 
 // Esperar a que la auth anónima esté lista antes de subir
@@ -906,11 +800,13 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
     appId: byId('fb-appId').value.trim(),
   };
   localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
-  byId('fb-status').textContent = 'Firebase guardado';
+  byId('fb-status').textContent = 'Firebase guardado localmente';
   ensureFirebase();
-  // Iniciar/actualizar sincronización siempre que haya config válida
-  startCloudSync();
-  byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
+  // Si ya está activado el flag de nube, comenzar sincronización inmediatamente
+  if (state.settings.useFirebase) {
+    startCloudSync();
+    byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
+  }
 });
 
 function populateFirebaseForm() {
@@ -955,7 +851,6 @@ refreshVoteForm();
 
 // Detectar fotos estáticas desplegadas en /fotos/ (si existe la carpeta)
 (async function probeLocalPhotos(){
-  if (!ENABLE_LOCAL_PHOTOS_PROBE) return;
   const candidates = [
     'fotos/1.jpg','fotos/1.jpeg','fotos/1.png','fotos/01.jpg','fotos/01.jpeg','fotos/01.png'
   ];
@@ -1043,9 +938,4 @@ async function autoAssignByButton() {
   if (status) status.textContent = count>0 ? `Asignadas ${count} fotos.` : 'No se encontraron archivos coincidentes.';
 }
 if (byId('aj-auto-assign')) byId('aj-auto-assign').addEventListener('click', autoAssignByButton);
-
-// Controles de sincronización en Ajustes
-if (byId('btn-cloud-push')) byId('btn-cloud-push').addEventListener('click', cloudPush);
-if (byId('btn-cloud-pull')) byId('btn-cloud-pull').addEventListener('click', cloudPull);
-if (byId('btn-restore-backup')) byId('btn-restore-backup').addEventListener('click', restoreBackup);
 
