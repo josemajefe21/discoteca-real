@@ -375,24 +375,29 @@ byId('toggle-general').addEventListener('change', renderRanking);
 // Chefs
 function renderChefs() {
   const tb = byId('tabla-chefs').querySelector('tbody');
-  // calcular puntaje base por chef
-  const base = state.chefs.map(c => {
-    const platos = state.platos.filter(p=>p.chefId===c.id);
-    const total = computeRanking({ general: true }).list
-      .filter(r => platos.some(p=>p.nombre===r.nombre))
-      .reduce((acc,r)=>acc+r.score,0);
-    return { ...c, platosCount: platos.length, total };
-  });
-  // ordenar por puntaje base y asignar bonus a top 3: +3, +2, +1
-  const sorted = base.slice().sort((a,b)=> b.total - a.total || a.nombre.localeCompare(b.nombre));
-  const idToBonus = new Map();
-  sorted.slice(0,3).forEach((c, idx) => { idToBonus.set(c.id, idx===0?3:idx===1?2:1); });
-  const withBonus = sorted.map(c => ({ ...c, bonus: idToBonus.get(c.id)||0, totalConBonus: c.total + (idToBonus.get(c.id)||0) }));
-  tb.innerHTML = withBonus.map(c=>`
+  // Alinear con selección de ranking actual (general o por vuelta)
+  const general = !!(byId('toggle-general') && byId('toggle-general').checked);
+  const vuelta = Number(byId('ranking-vuelta')?.value||1);
+  const rank = computeRanking({ general, vuelta }).list;
+  // mapear platoId -> chefId
+  const platoChef = new Map(state.platos.map(p=>[p.id, p.chefId]));
+  // acumular puntaje por chef a partir del ranking (score ya representa suma de 3/2/1 de votos)
+  const chefScores = new Map();
+  for (const r of rank) {
+    const chefId = platoChef.get(r.platoId);
+    if (!chefId) continue;
+    chefScores.set(chefId, (chefScores.get(chefId)||0) + (r.score||0));
+  }
+  const rows = state.chefs.map(c => {
+    const platosCount = state.platos.filter(p=>p.chefId===c.id).length;
+    const total = chefScores.get(c.id)||0;
+    return { ...c, platosCount, total };
+  }).sort((a,b)=> b.total - a.total || a.nombre.localeCompare(b.nombre));
+  tb.innerHTML = rows.map(c=>`
     <tr>
-      <td>${c.nombre}${c.alias?` <span class="muted">(${c.alias})</span>`:''} ${c.bonus?`<span class="badge" title="Bonus podio">+${c.bonus}</span>`:''}</td>
+      <td>${c.nombre}${c.alias?` <span class="muted">(${c.alias})</span>`:''}</td>
       <td>${c.platosCount}</td>
-      <td>${c.totalConBonus}</td>
+      <td>${c.total}</td>
     </tr>
   `).join('') || '<tr><td colspan="3" class="muted">Agregá chefs</td></tr>';
 }
@@ -623,6 +628,7 @@ function initPhotoDropzone() {
   const progress = byId('aj-plato-progress');
   const bar = byId('aj-plato-progress-bar');
   if (!dz || !file || !preview) return;
+  let uploading = false;
   const setImage = async (f) => {
     if (!f || !f.type?.startsWith('image/')) return;
     // Si hay Firebase configurado, subir a Storage, sino usar dataURL
@@ -630,14 +636,18 @@ function initPhotoDropzone() {
     const useFb = !!state.settings.useFirebase && !!cfg;
     if (useFb) {
       try {
+        if (uploading) return;
+        uploading = true;
         progress.style.display = '';
         bar.style.width = '0%';
         const url = await uploadToFirebase(f, (pct)=>{ bar.style.width = pct+'%'; });
         byId('aj-plato-foto').value = url;
         preview.src = url; preview.style.display = 'block';
         progress.style.display = 'none';
+        uploading = false;
       } catch (e) {
         progress.style.display = 'none';
+        uploading = false;
         // fallback dataURL
         const reader = new FileReader();
         reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
