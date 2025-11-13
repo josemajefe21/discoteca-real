@@ -802,11 +802,6 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
   localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
   byId('fb-status').textContent = 'Firebase guardado localmente';
   ensureFirebase();
-  // Si ya está activado el flag de nube, comenzar sincronización inmediatamente
-  if (state.settings.useFirebase) {
-    startCloudSync();
-    byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
-  }
 });
 
 function populateFirebaseForm() {
