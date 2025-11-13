@@ -44,6 +44,7 @@ let session = { userId: null };
 let fb = { app: null, storage: null };
 let cloud = { unsub: null, started: false };
 let isApplyingCloud = false;
+const ENABLE_LOCAL_PHOTOS_PROBE = false;
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -81,7 +82,9 @@ function saveState(s, opts) {
       const inst = ensureFirebase();
       if (!inst || !firebase.firestore) return;
       const db = firebase.firestore();
-      db.collection('discoteca').doc('main').set(s).catch(()=>{});
+      db.collection('discoteca').doc('main').set(s)
+        .then(()=>{ try { console.info('CloudSync: estado enviado a Firestore'); } catch {} })
+        .catch(()=>{});
     } catch {}
   }
 }
@@ -707,10 +710,11 @@ function ensureFirebase() {
   try {
     fb.app = firebase.apps?.length ? firebase.app() : firebase.initializeApp(cfg);
     fb.storage = firebase.storage();
+    try { console.info('Firebase: inicializado', { projectId: cfg.projectId, storageBucket: cfg.storageBucket }); } catch {}
     // no esperar aquí; se asegura antes de subir
     firebase.auth().signInAnonymously().catch(()=>{});
     return fb;
-  } catch { return null; }
+  } catch (e) { try { console.warn('Firebase: error al inicializar', e); } catch {} return null; }
 }
 
 function isCloudEnabled(explicitState) {
@@ -737,10 +741,12 @@ function startCloudSync() {
   // inicializar documento si falta
   docRef.get().then((doc)=>{ if (!doc.exists) { docRef.set(state).catch(()=>{}); } }).catch(()=>{});
   if (cloud.unsub) { try { cloud.unsub(); } catch {} }
+  try { console.info('CloudSync: iniciando suscripción a discoteca/main'); } catch {}
   cloud.unsub = docRef.onSnapshot((snap)=>{
     if (!snap.exists) return;
     const data = snap.data();
     if (!data) return;
+    try { console.info('CloudSync: snapshot recibido'); } catch {}
     try {
       const localStr = JSON.stringify(state);
       const remoteStr = JSON.stringify(data);
@@ -855,6 +861,7 @@ refreshVoteForm();
 
 // Detectar fotos estáticas desplegadas en /fotos/ (si existe la carpeta)
 (async function probeLocalPhotos(){
+  if (!ENABLE_LOCAL_PHOTOS_PROBE) return;
   const candidates = [
     'fotos/1.jpg','fotos/1.jpeg','fotos/1.png','fotos/01.jpg','fotos/01.jpeg','fotos/01.png'
   ];
