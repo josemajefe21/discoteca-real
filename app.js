@@ -74,7 +74,9 @@ function saveState(s, opts) {
   const options = opts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   if (options.skipCloud) return;
-  if (isCloudEnabled() && !isApplyingCloud) {
+  // Evitar usar 'state' aquí (puede no estar inicializado durante loadState)
+  const cloudFlag = !!(s && s.settings && s.settings.useFirebase);
+  if (cloudFlag && !isApplyingCloud) {
     try {
       const inst = ensureFirebase();
       if (!inst || !firebase.firestore) return;
