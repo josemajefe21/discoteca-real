@@ -949,6 +949,32 @@ if (byId('qa-podio-v1')) byId('qa-podio-v1').addEventListener('click', ()=>{
   // Empujar a la nube
   quickPushCloud();
 });
+if (byId('qa-restore')) byId('qa-restore').addEventListener('click', ()=>{
+  try {
+    const raw = localStorage.getItem(BACKUP_KEY);
+    if (!raw) { alert('No hay respaldo local disponible'); return; }
+    const data = JSON.parse(raw);
+    if (!data || !data.voters || !data.chefs || !data.platos || !data.votos) { alert('Respaldo inválido'); return; }
+    state = data;
+    saveState(state, { skipCloud: true });
+    refreshAll();
+    quickSetStatus('Respaldo restaurado');
+    console.info('Quick: respaldo restaurado desde BACKUP');
+  } catch (e) {
+    quickSetStatus('Error al restaurar respaldo');
+  }
+});
+if (byId('qa-copy')) byId('qa-copy').addEventListener('click', async ()=>{
+  try {
+    const primary = localStorage.getItem(STORAGE_KEY);
+    const backup = localStorage.getItem(BACKUP_KEY);
+    const text = primary || backup || JSON.stringify(state, null, 2);
+    await (navigator.clipboard && navigator.clipboard.writeText(text));
+    quickSetStatus('JSON copiado al portapapeles');
+  } catch {
+    quickSetStatus('No se pudo copiar JSON');
+  }
+});
 
 // Esperar a que la auth anónima esté lista antes de subir
 function waitForAnonymousAuth(timeoutMs = 7000) {
