@@ -74,13 +74,19 @@ function saveState(s, opts) {
   const options = opts || {};
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   if (options.skipCloud) return;
-  if (isCloudEnabled() && !isApplyingCloud) {
-    try {
+  // evaluar uso de nube SIN leer la variable global state (evita TDZ en bootstrap)
+  try {
+    const useFbFlag = !!(s && s.settings && s.settings.useFirebase);
+    const cfg = loadFirebaseCfg();
+    const canCloud = useFbFlag && !!cfg && !!window.firebase && !!firebase.firestore;
+    if (canCloud && !isApplyingCloud) {
       const inst = ensureFirebase();
       if (!inst || !firebase.firestore) return;
       const db = firebase.firestore();
       db.collection('discoteca').doc('main').set(s).catch(()=>{});
-    } catch {}
+    }
+  } catch {
+    // silencio: si falla, al menos persistimos localmente
   }
 }
 
@@ -713,7 +719,8 @@ function ensureFirebase() {
 
 function isCloudEnabled() {
   const cfg = loadFirebaseCfg();
-  return !!state.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
+  const flag = (typeof state !== 'undefined' && state && state.settings && state.settings.useFirebase) || false;
+  return flag && !!cfg && !!window.firebase && !!firebase.firestore;
 }
 
 function refreshAll() {
