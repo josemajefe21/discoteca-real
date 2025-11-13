@@ -57,6 +57,47 @@ function countEntries(s) {
   } catch { return { platos:0, votos:0, chefs:0, voters:0, total:0 }; }
 }
 
+function normalizeState(input) {
+  const s = input && typeof input === 'object' ? input : {};
+  const settings = { ...DEFAULT_SETTINGS, ...(s.settings || {}) };
+  const voters = Array.isArray(s.voters) ? s.voters.map(v => ({
+    id: v.id || uid(),
+    nombre: (v.nombre || '').toString(),
+    activo: v.activo !== false,
+    password: (v.password || '').toString(),
+  })) : [];
+  const chefs = Array.isArray(s.chefs) ? s.chefs.map(c => ({
+    id: c.id || uid(),
+    nombre: (c.nombre || '').toString(),
+    alias: (c.alias || '').toString(),
+  })) : [];
+  const platos = Array.isArray(s.platos) ? s.platos.map(p => ({
+    id: p.id || uid(),
+    nombre: (p.nombre || '').toString(),
+    descripcion: (p.descripcion || '').toString(),
+    chefId: p.chefId || (chefs[0]?.id || ''),
+    fotoUrl: (p.fotoUrl || '').toString(),
+    vuelta: Math.max(1, Number(p.vuelta || 1)),
+    orden: Number(p.orden || 0),
+  })) : [];
+  const votos = Array.isArray(s.votos) ? s.votos.map(v => ({
+    id: v.id || uid(),
+    vuelta: Math.max(1, Number(v.vuelta || 1)),
+    userId: (v.userId || '').toString(),
+    picks: Array.isArray(v.picks) ? v.picks.slice(0,3).filter(Boolean) : [],
+  })) : [];
+  const baseScores = typeof s.baseScores === 'object' && s.baseScores !== null ? s.baseScores : {};
+  return {
+    version: Number(s.version || 1),
+    settings,
+    voters,
+    chefs: chefs.length ? chefs : DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
+    platos,
+    votos,
+    baseScores,
+  };
+}
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) {
@@ -951,15 +992,16 @@ if (byId('qa-podio-v1')) byId('qa-podio-v1').addEventListener('click', ()=>{
 });
 if (byId('qa-restore')) byId('qa-restore').addEventListener('click', ()=>{
   try {
-    const raw = localStorage.getItem(BACKUP_KEY);
-    if (!raw) { alert('No hay respaldo local disponible'); return; }
+    const raw = localStorage.getItem(BACKUP_KEY) || localStorage.getItem(STORAGE_KEY);
+    if (!raw) { alert('No hay respaldo/estado local disponible'); return; }
     const data = JSON.parse(raw);
-    if (!data || !data.voters || !data.chefs || !data.platos || !data.votos) { alert('Respaldo inválido'); return; }
-    state = data;
+    const normalized = normalizeState(data);
+    state = normalized;
     saveState(state, { skipCloud: true });
     refreshAll();
-    quickSetStatus('Respaldo restaurado');
-    console.info('Quick: respaldo restaurado desde BACKUP');
+    quickShowRanking();
+    quickSetStatus('Respaldo restaurado y aplicado');
+    console.info('Quick: respaldo restaurado (normalized)');
   } catch (e) {
     quickSetStatus('Error al restaurar respaldo');
   }
