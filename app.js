@@ -804,6 +804,42 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
   ensureFirebase();
 });
 
+// Botones de sincronización manual
+if (byId('aj-cloud-push')) byId('aj-cloud-push').addEventListener('click', async ()=>{
+  const status = byId('aj-cloud-status');
+  try {
+    if (!isCloudEnabled()) { status.textContent = 'Activá “Subir fotos a Firebase” y configurá Firebase primero.'; return; }
+    const inst = ensureFirebase();
+    if (!inst || !firebase.firestore) { status.textContent = 'Firestore no disponible.'; return; }
+    const db = firebase.firestore();
+    await db.collection('discoteca').doc('main').set(state);
+    status.textContent = 'Estado subido a la nube.';
+  } catch (e) {
+    status.textContent = 'Error al subir. Revisá reglas y auth anónima.';
+  }
+});
+if (byId('aj-cloud-pull')) byId('aj-cloud-pull').addEventListener('click', async ()=>{
+  const status = byId('aj-cloud-status');
+  try {
+    if (!isCloudEnabled()) { status.textContent = 'Activá “Subir fotos a Firebase” y configurá Firebase primero.'; return; }
+    const inst = ensureFirebase();
+    if (!inst || !firebase.firestore) { status.textContent = 'Firestore no disponible.'; return; }
+    const db = firebase.firestore();
+    const snap = await db.collection('discoteca').doc('main').get();
+    if (!snap.exists) { status.textContent = 'No hay estado en la nube aún.'; return; }
+    const data = snap.data();
+    if (!data) { status.textContent = 'Documento vacío en la nube.'; return; }
+    isApplyingCloud = true;
+    state = data;
+    saveState(state, { skipCloud: true });
+    refreshAll();
+    isApplyingCloud = false;
+    status.textContent = 'Estado bajado desde la nube.';
+  } catch (e) {
+    status.textContent = 'Error al bajar. Revisá reglas y auth anónima.';
+  }
+});
+
 function populateFirebaseForm() {
   const cfg = loadFirebaseCfg();
   if (!cfg) return;
