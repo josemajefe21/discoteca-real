@@ -40,6 +40,11 @@ const DEFAULT_FIREBASE_CFG = {
   measurementId: "G-6JN5RNF4ME"
 };
 const CLOUDINARY_CFG_KEY = 'discoteca_cld_cfg_v1';
+const DEFAULT_CLOUDINARY_CFG = {
+  cloud: 'dqpgrjksw',
+  preset: 'discoteca_unsigned',
+  folder: 'platos'
+};
 
 let state = loadState();
 let session = { userId: null };
@@ -50,9 +55,15 @@ let isApplyingCloud = false;
 function loadCloudinaryCfg() {
   try {
     const raw = localStorage.getItem(CLOUDINARY_CFG_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      localStorage.setItem(CLOUDINARY_CFG_KEY, JSON.stringify(DEFAULT_CLOUDINARY_CFG));
+      return DEFAULT_CLOUDINARY_CFG;
+    }
     const cfg = JSON.parse(raw);
-    return cfg && cfg.cloud && cfg.preset ? cfg : null;
+    if (cfg && cfg.cloud && cfg.preset) return cfg;
+    // si faltan campos, usar defaults y persistirlos
+    localStorage.setItem(CLOUDINARY_CFG_KEY, JSON.stringify(DEFAULT_CLOUDINARY_CFG));
+    return DEFAULT_CLOUDINARY_CFG;
   } catch { return null; }
 }
 
