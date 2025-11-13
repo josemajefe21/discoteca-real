@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS = {
   tamGrupo: 9,
   votosRequeridos: 9,
   useFirebase: false,
+  syncCloud: true,
 };
 const FIREBASE_CFG_KEY = 'discoteca_fb_cfg_v1';
 const DEFAULT_FIREBASE_CFG = {
@@ -78,9 +79,9 @@ function saveState(s, opts) {
   if (options.skipCloud) return;
   // evaluar uso de nube SIN leer la variable global state (evita TDZ en bootstrap)
   try {
-    const useFbFlag = !!(s && s.settings && s.settings.useFirebase);
+    const useCloudFlag = !(s && s.settings && s.settings.syncCloud === false); // por defecto true
     const cfg = loadFirebaseCfg();
-    const canCloud = useFbFlag && !!cfg && !!window.firebase && !!firebase.firestore;
+    const canCloud = useCloudFlag && !!cfg && !!window.firebase && !!firebase.firestore;
     if (canCloud && !isApplyingCloud) {
       const inst = ensureFirebase();
       if (!inst || !firebase.firestore) return;
@@ -526,7 +527,8 @@ if (byId('aj-guardar')) byId('aj-guardar').addEventListener('click', ()=>{
   state.settings.votosRequeridos = Math.max(1, Number(byId('aj-requeridos').value||DEFAULT_SETTINGS.votosRequeridos));
   state.settings.useFirebase = !!(byId('aj-fb-flag') && byId('aj-fb-flag').checked);
   saveState(state);
-  if (state.settings.useFirebase) startCloudSync(); else stopCloudSync();
+  // mantener sync de nube siempre que haya config válida
+  startCloudSync();
   renderRanking();
 });
 
@@ -727,7 +729,7 @@ function ensureFirebase() {
 
 function isCloudEnabled() {
   const cfg = loadFirebaseCfg();
-  const flag = (typeof state !== 'undefined' && state && state.settings && state.settings.useFirebase) || false;
+  const flag = (typeof state !== 'undefined' && state && state.settings && state.settings.syncCloud !== false);
   return flag && !!cfg && !!window.firebase && !!firebase.firestore;
 }
 
