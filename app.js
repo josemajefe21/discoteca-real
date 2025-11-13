@@ -653,6 +653,7 @@ function initPhotoDropzone() {
   const progress = byId('aj-plato-progress');
   const bar = byId('aj-plato-progress-bar');
   const status = byId('aj-plato-upload-status');
+  const pickBtn = byId('aj-plato-pick');
   if (!dz || !file || !preview) return;
   let uploading = false;
   const setImage = async (f) => {
@@ -675,9 +676,10 @@ function initPhotoDropzone() {
         if (status) status.textContent = 'Imagen subida ✔';
         if (submitBtn) submitBtn.disabled = false;
         uploading = false;
+        try { file.value = ''; } catch {}
       } catch (e) {
         progress.style.display = 'none';
-        if (status) status.textContent = 'Error subiendo imagen. Se usará copia local.';
+        if (status) status.textContent = `Error subiendo imagen. Se usará copia local. ${e && e.message ? '('+e.message+')' : ''}`;
         const submitBtn = byId('aj-form-plato')?.querySelector('button[type=\"submit\"]');
         if (submitBtn) submitBtn.disabled = false;
         uploading = false;
@@ -685,11 +687,13 @@ function initPhotoDropzone() {
         const reader = new FileReader();
         reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
         reader.readAsDataURL(f);
+        try { file.value = ''; } catch {}
       }
     } else {
       const reader = new FileReader();
       reader.onload = () => { const dataUrl = reader.result; byId('aj-plato-foto').value = dataUrl; preview.src = dataUrl; preview.style.display = 'block'; };
       reader.readAsDataURL(f);
+      try { file.value = ''; } catch {}
     }
   };
   dz.addEventListener('click', ()=> file.click());
@@ -697,6 +701,8 @@ function initPhotoDropzone() {
   dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
   dz.addEventListener('drop', (e)=>{ e.preventDefault(); dz.classList.remove('dragover'); const f = e.dataTransfer.files[0]; setImage(f); });
   file.addEventListener('change', ()=> setImage(file.files[0]));
+  file.addEventListener('input', ()=> setImage(file.files[0]));
+  if (pickBtn) pickBtn.addEventListener('click', ()=> file.click());
   dropInited = true;
 }
 
