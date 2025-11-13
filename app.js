@@ -54,6 +54,7 @@ function loadState() {
       parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings||{}) };
       if (!parsed.platos) parsed.platos = [];
       if (!parsed.votos) parsed.votos = [];
+      if (!parsed.manualPodio) parsed.manualPodio = {};
       saveState(parsed);
       return parsed;
     } catch (e) {}
@@ -65,6 +66,7 @@ function loadState() {
     chefs: DEFAULT_VOTERS.map(v => ({ id: v.id, nombre: v.nombre, alias: '' })),
     platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
+    manualPodio: {}, // { [vuelta:number]: [{ platoId?, nombre, puntos }] }
   };
   saveState(initial);
   return initial;
@@ -359,6 +361,9 @@ function renderRanking() {
       <td>${row.p1}</td>
     </tr>
   `).join('') || '<tr><td colspan="7" class="muted">Sin votos aún</td></tr>';
+
+  // Podio manual si existe para la vuelta (solo cuando no es ranking general)
+  renderPodio(general ? null : vuelta);
 }
 byId('ranking-vuelta').addEventListener('change', renderRanking);
 byId('toggle-general').addEventListener('change', renderRanking);
@@ -763,6 +768,49 @@ function stopCloudSync() {
   cloud.started = false;
 }
 
+function renderPodio(vuelta) {
+  const wrap = byId('ranking-wrap');
+  if (!wrap) return;
+  let podioEl = byId('ranking-podio');
+  if (podioEl && (!vuelta || !state.manualPodio || !state.manualPodio[vuelta])) {
+    podioEl.remove();
+    return;
+  }
+  if (!vuelta || !state.manualPodio || !state.manualPodio[vuelta]) return;
+  const items = (state.manualPodio[vuelta]||[]).slice().sort((a,b)=> (b.puntos||0)-(a.puntos||0)).slice(0,3);
+  if (!podioEl) {
+    podioEl = document.createElement('div');
+    podioEl.id = 'ranking-podio';
+    wrap.insertBefore(podioEl, wrap.firstChild);
+  }
+  const card = (rank, it) => {
+    const plato = it.platoId ? state.platos.find(p=>p.id===it.platoId) : null;
+    const chef = plato ? state.chefs.find(c=>c.id===plato.chefId) : null;
+    const foto = plato && plato.fotoUrl ? `<img src="${plato.fotoUrl}" alt="${plato.nombre}" style="width:100%;height:160px;object-fit:cover;border-radius:10px 10px 0 0">` : '';
+    const nombre = it.nombre || (plato?plato.nombre:'');
+    const chefTxt = chef ? `<div class="muted" style="margin-top:4px">${chef.nombre}</div>` : '';
+    const crown = rank===1?'🥇':rank===2?'🥈':'🥉';
+    const accent = rank===1?'#ffd166':rank===2?'#c0c7d3':'#f4b393';
+    return `
+      <div class="card" style="padding:0;border:1px solid rgba(255,255,255,0.08);box-shadow:0 4px 14px rgba(0,0,0,0.12);border-top:3px solid ${accent}">
+        ${foto}
+        <div style="padding:12px 14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:20px">${crown}</span><strong>${rank}°</strong><span class="badge" style="margin-left:auto">${it.puntos||0} pts</span></div>
+          <div style="font-weight:600">${nombre}</div>
+          ${chefTxt}
+        </div>
+      </div>
+    `;
+  };
+  podioEl.innerHTML = `
+    <div class="podio-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px">
+      ${card(1, items[0]||{})}
+      ${card(2, items[1]||{})}
+      ${card(3, items[2]||{})}
+    </div>
+  `;
+}
+
 // Esperar a que la auth anónima esté lista antes de subir
 function waitForAnonymousAuth(timeoutMs = 7000) {
   const inst = ensureFirebase();
@@ -880,6 +928,31 @@ toggleFirebaseBlock();
   if (changed) saveState(state);
 })();
 
+// Podio manual inicial (si el usuario no lo cargó aún)
+(function initManualPodio() {
+  try {
+    const v = 1;
+    if (!state.manualPodio) state.manualPodio = {};
+    if (state.manualPodio[v] && state.manualPodio[v].length) return;
+    function findByKeywords(words) {
+      const kws = words.map(w=>w.toLowerCase());
+      return state.platos.find(p=>{
+        const n = (p.nombre||'').toLowerCase();
+        return kws.every(k=> n.includes(k));
+      });
+    }
+    const hamb = findByKeywords(['hamburguesa','pollo']) || null;
+    const oso = findByKeywords(['osobuco']) || null;
+    const pech = findByKeywords(['pechug','mostaza']) || null;
+    state.manualPodio[v] = [
+      { platoId: hamb?.id || null, nombre: hamb?.nombre || 'Hamburguesas de pollo', puntos: 21 },
+      { platoId: oso?.id || null, nombre: oso?.nombre || 'Osobuco', puntos: 17 },
+      { platoId: pech?.id || null, nombre: pech?.nombre || 'Pechugas a la mostaza', puntos: 6 },
+    ];
+    saveState(state);
+  } catch {}
+})();
+
 // Primera renderización
 renderPlatos();
 renderChefs();
@@ -889,6 +962,12 @@ refreshVoteForm();
 
 // Detectar fotos estáticas desplegadas en /fotos/ (si existe la carpeta)
 (async function probeLocalPhotos(){
+  // Evitar spam de 404 en producción: solo probar en entornos locales
+  try {
+    const host = (location && location.hostname) || '';
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    if (!isLocal) return;
+  } catch {}
   const candidates = [
     'fotos/1.jpg','fotos/1.jpeg','fotos/1.png','fotos/01.jpg','fotos/01.jpeg','fotos/01.png'
   ];
