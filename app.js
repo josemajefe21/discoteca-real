@@ -55,7 +55,7 @@ function loadState() {
       parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings||{}) };
       if (!parsed.platos) parsed.platos = [];
       if (!parsed.votos) parsed.votos = [];
-      saveState(parsed);
+      saveState(parsed, { skipCloud: true });
       return parsed;
     } catch (e) {}
   }
@@ -67,7 +67,7 @@ function loadState() {
     platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
   };
-  saveState(initial);
+  saveState(initial, { skipCloud: true });
   return initial;
 }
 
@@ -76,7 +76,7 @@ function saveState(s, opts) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   if (options.skipCloud) return;
   // Evitar usar 'state' aquí (puede no estar inicializado durante loadState)
-  const cloudFlag = !!(s && s.settings && s.settings.useFirebase);
+  const cloudFlag = isCloudEnabled(s);
   if (cloudFlag && !isApplyingCloud) {
     try {
       const inst = ensureFirebase();
@@ -718,10 +718,9 @@ function ensureFirebase() {
 }
 
 function isCloudEnabled(explicitState) {
-  const s = explicitState || (typeof state !== 'undefined' ? state : null);
-  if (!s || !s.settings) return false;
+  // No requerimos ningún toggle; si hay config Firebase válida y Firestore cargado, habilitamos sync
   const cfg = loadFirebaseCfg();
-  return !!s.settings.useFirebase && !!cfg && !!window.firebase && !!firebase.firestore;
+  return !!cfg && !!window.firebase && !!firebase.firestore;
 }
 
 function refreshAll() {
@@ -810,13 +809,11 @@ if (byId('fb-guardar')) byId('fb-guardar').addEventListener('click', ()=>{
     appId: byId('fb-appId').value.trim(),
   };
   localStorage.setItem(FIREBASE_CFG_KEY, JSON.stringify(cfg));
-  byId('fb-status').textContent = 'Firebase guardado localmente';
+  byId('fb-status').textContent = 'Firebase guardado';
   ensureFirebase();
-  // Si ya está activado el flag de nube, comenzar sincronización inmediatamente
-  if (state.settings.useFirebase) {
-    startCloudSync();
-    byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
-  }
+  // Iniciar/actualizar sincronización siempre que haya config válida
+  startCloudSync();
+  byId('fb-status').textContent = 'Firebase guardado y sincronización activa';
 });
 
 function populateFirebaseForm() {
