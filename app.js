@@ -212,8 +212,12 @@ function initSelectors() {
     if (!sel) return;
     const current = sel.value;
     sel.innerHTML = vueltas.map(v => `<option value="${v}">Vuelta ${v}</option>`).join('');
-    if (current && Array.from(sel.options).some(o=>o.value===current)) {
+    const hasCurrent = current && Array.from(sel.options).some(o=>o.value===current);
+    if (hasCurrent) {
       sel.value = current;
+    } else {
+      // Para Votar, si no hay valor válido, por defecto a la última vuelta disponible
+      if (sel.id === 'voto-vuelta') sel.value = String(vueltas[vueltas.length-1]);
     }
   });
 }
