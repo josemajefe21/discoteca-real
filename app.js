@@ -77,6 +77,7 @@ function loadState() {
       if (!parsed.platos) parsed.platos = [];
       if (!parsed.votos) parsed.votos = [];
       if (!parsed.manualPodio) parsed.manualPodio = {};
+      if (!parsed.updatedAt) parsed.updatedAt = Date.now();
       saveState(parsed);
       return parsed;
     } catch (e) {}
@@ -89,6 +90,7 @@ function loadState() {
     platos: [], // {id, nombre, descripcion, chefId, fotoUrl, vuelta, orden}
     votos: [], // {id, vuelta, userId, picks:[platoId1, platoId2, platoId3]}
     manualPodio: {}, // { [vuelta:number]: [{ platoId?, nombre, puntos }] }
+    updatedAt: Date.now(),
   };
   saveState(initial);
   return initial;
@@ -96,6 +98,7 @@ function loadState() {
 
 function saveState(s, opts) {
   const options = opts || {};
+  try { s.updatedAt = Date.now(); } catch {}
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   if (options.skipCloud) return;
   // evaluar uso de nube SIN leer la variable global state (evita TDZ en bootstrap)
@@ -903,17 +906,16 @@ function startCloudSync() {
   try { db.enablePersistence && db.enablePersistence({ synchronizeTabs: true }); } catch {}
   const docRef = db.collection('discoteca').doc('main');
   // inicializar documento si falta
-  docRef.get().then((doc)=>{ if (!doc.exists) { docRef.set(state).catch(()=>{}); } }).catch(()=>{});
+  docRef.get().then((doc)=>{ if (!doc.exists) { const init = { ...state, updatedAt: state.updatedAt || Date.now() }; docRef.set(init).catch(()=>{}); } }).catch(()=>{});
   if (cloud.unsub) { try { cloud.unsub(); } catch {} }
   cloud.unsub = docRef.onSnapshot((snap)=>{
     if (!snap.exists) return;
     const data = snap.data();
     if (!data) return;
-    try {
-      const localStr = JSON.stringify(state);
-      const remoteStr = JSON.stringify(data);
-      if (localStr === remoteStr) return;
-    } catch {}
+    // aplicar sólo si remoto es más nuevo
+    const remoteTs = Number(data.updatedAt||0);
+    const localTs = Number(state?.updatedAt||0);
+    if (remoteTs && localTs && remoteTs <= localTs) return;
     isApplyingCloud = true;
     state = data;
     saveState(state, { skipCloud: true });
