@@ -920,10 +920,12 @@ function startCloudSync() {
     if (!snap.exists) return;
     const data = snap.data();
     if (!data) return;
-    // aplicar sólo si remoto es más nuevo
-    const remoteTs = Number(data.updatedAt||0);
-    const localTs = Number(state?.updatedAt||0);
-    if (remoteTs && localTs && remoteTs <= localTs) return;
+    // aplicar sólo si hay diferencias con el local
+    try {
+      const localStr = JSON.stringify(state);
+      const remoteStr = JSON.stringify(data);
+      if (localStr === remoteStr) return;
+    } catch {}
     isApplyingCloud = true;
     state = data;
     saveState(state, { skipCloud: true });
