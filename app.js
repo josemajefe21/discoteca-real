@@ -210,7 +210,11 @@ function initSelectors() {
   const ajFiltroVuelta = byId('aj-filtro-vuelta');
   [filtroVuelta, votoVuelta, rankingVuelta, ajFiltroVuelta].forEach(sel => {
     if (!sel) return;
+    const current = sel.value;
     sel.innerHTML = vueltas.map(v => `<option value="${v}">Vuelta ${v}</option>`).join('');
+    if (current && Array.from(sel.options).some(o=>o.value===current)) {
+      sel.value = current;
+    }
   });
 }
 
